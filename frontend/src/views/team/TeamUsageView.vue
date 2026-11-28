@@ -215,11 +215,11 @@
                 </span>
               </template>
             </el-table-column>
+            <el-table-column :label="t('v.tu.t021')" width="90" align="right">
+              <template #default="{ row }">{{ formatCompact(row.totalTokens) }}</template>
+            </el-table-column>
             <el-table-column v-if="billingEnabled" :label="t('v.tu.t022')" width="80" align="right">
               <template #default="{ row }">¥{{ formatAmount(row.amount) }}</template>
-            </el-table-column>
-            <el-table-column v-else :label="t('v.tu.t021')" width="100" align="right">
-              <template #default="{ row }">{{ formatCompact(row.totalTokens) }}</template>
             </el-table-column>
           </el-table>
           <el-empty v-if="!loading && usage.byVirtualModel.length === 0" :description="t('v.tu.t018')" :image-size="60" />
@@ -462,7 +462,13 @@ const renderVmChart = () => {
         show: true,
         position: 'right',
         color: chartTheme.value.textColor,
-        formatter: (p: any) => billingEnabled.value ? `¥${formatAmount(p.value)}` : formatCompact(p.value)
+        // 企业版条尾同时给出金额与 token 用量（2026-11-28，避免只看得到钱）
+        formatter: (p: any) => {
+          const row = rows[rows.length - 1 - p.dataIndex]
+          return billingEnabled.value
+            ? `¥${formatAmount(p.value)} · ${formatCompact(row?.totalTokens ?? 0)}`
+            : formatCompact(p.value)
+        }
       }
     }]
     })
@@ -481,7 +487,7 @@ const renderStChart = () => {
       formatter: (p: any) => {
         const row = rows.find(r => r.label === p.name)
         return billingEnabled.value
-          ? `${p.name}${t('v.tu.x007', { amount: formatAmount(p.value), percent: p.percent })}`
+          ? `${p.name}${t('v.tu.x007', { amount: formatAmount(p.value), tokens: formatNumber(row?.totalTokens ?? 0), percent: p.percent })}`
           : `${p.name}${t('v.tu.x009', { tokens: formatNumber(row?.totalTokens ?? p.value), percent: p.percent })}`
       }
     },

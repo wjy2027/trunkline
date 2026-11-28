@@ -53,6 +53,12 @@
     "limitDailyReq": "{n}/day",
     "limitDailyToken": "{n} tokens/day",
     "limitMonthlyReq": "{n}/month",
-    "limitMonthlyToken": "{n} tokens/month"
+    "limitMonthlyToken": "{n} tokens/month",
+    "quotaPerMinute": "Rate (req/min)",
+    "quotaHourlyRequest": "Hourly (req)",
+    "quotaHourlyToken": "Hourly (tokens)",
+    "quotaDailyRequest": "Daily (req)",
+    "quotaDailyToken": "Daily (tokens)",
+    "quotaMonthlyRequest": "Monthly (req)"
   }
 }

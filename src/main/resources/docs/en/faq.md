@@ -48,6 +48,10 @@ The quota ledger is disabled by default, so limits do not actually block. An adm
 
 Online approval is not connected. Ask your administrator directly.
 
+**I want a "max spend per month" limit — where do I set it**
+
+With enterprise billing unlocked: for a key, fill the monthly amount in the Quota dialog in All Keys; for a tenant, use the Quota dialog in Tenants. The amount is an estimate converted from model prices and stored as a Token limit; it cannot be filled until the models have prices.
+
 ## Menus and permissions
 
 **Some menu items are missing**

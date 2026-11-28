@@ -22,7 +22,7 @@
               <el-icon><Document /></el-icon>
               <span>{{ homePage.title }}</span>
             </el-menu-item>
-            <el-sub-menu v-for="sec in nav" :key="sec.title" :index="sec.title">
+            <el-sub-menu v-for="sec in visibleNav" :key="sec.title" :index="sec.title">
               <template #title>{{ sec.title }}</template>
               <el-menu-item v-for="pg in sec.pages" :key="pg.path" :index="pg.path">
                 {{ pg.title }}
@@ -81,13 +81,15 @@ import { Document } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import MarkdownRenderer from '@/views/playground/components/common/MarkdownRenderer.vue'
 import { getDocContent } from '@/api/docs'
-import { getDocsNav, getDocHome, type DocPage } from '@/config/docsNav'
+import { getDocsNav, getDocHome, ENTERPRISE_ONLY_DOC_PATHS, filterNavByEdition, type DocPage } from '@/config/docsNav'
 import { useLocale } from '@/composables/useLocale'
+import { useEnterpriseStore } from '@/stores/enterprise'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { locale: appLocale } = useLocale()
+const enterprise = useEnterpriseStore()
 
 /** 后端资源目录名（src/main/resources/docs/{zh,en}） */
 type DocLang = 'zh' | 'en'
@@ -113,6 +115,16 @@ const path = ref<string>(
 /** 当前语言的导航与首页 */
 const nav = computed(() => getDocsNav(lang.value))
 const homePage = computed<DocPage>(() => getDocHome(lang.value))
+
+/**
+ * 按部署形态过滤后的可见导航（2026-11-28 方案 B）。
+ *
+ * 纯 OSS 部署（edition !== 'enterprise'）隐藏企业版专属页（租户管理 / 企业管理），
+ * 与后端 DocsController 的 fail-closed 拒绝同口径。未加载完成时按社区版处理
+ * （fail-closed，与 SettingsView 灰态锁同口径）；enterprise.features 是响应式的，
+ * 企业版 store 加载完成后导航自动展开，无需手动刷新。
+ */
+const visibleNav = computed(() => filterNavByEdition(nav.value, enterprise.enterpriseEdition))
 
 /** 是否为帮助首页（仅首页显示角色直达卡片） */
 const isHome = computed(() => path.value === 'index')
@@ -141,7 +153,7 @@ const activeKey = computed(() => path.value)
 
 /** 默认展开的分组（当前页所在分组；中文分组标题为 el-sub-menu index） */
 const defaultOpeneds = computed(() => {
-  for (const sec of nav.value) {
+  for (const sec of visibleNav.value) {
     if (sec.pages.some((p) => p.path === path.value)) {
       return [sec.title]
     }
@@ -165,15 +177,19 @@ const failureReason = ref<'not-found' | 'unauthorized' | 'error'>('not-found')
  * 语言以全局为准：urlLang 只用于判断「URL 是否要同步成当前全局语言」，
  * 永远不会反过来改写全局语言。path 则按当前语言的导航白名单过滤，
  * 旧版链接（?path=guide/xxx）、非法分组名一律回落首页。
+ * 白名单按部署形态取「可见导航」：纯 OSS 部署下企业版专属 path 同样视为非法，
+ * 由调用方给出「这是企业版功能」的专门回落提示（区别于普通失效链接）。
  */
-function normalizeDocRoute(urlLang: string, qPath: string, globalLang: DocLang) {
+function normalizeDocRoute(urlLang: string, qPath: string, globalLang: DocLang, enterpriseDeployed: boolean) {
   const known =
     qPath === 'index' ||
-    getDocsNav(globalLang).some((s) => s.pages.some((p) => p.path === qPath))
+    filterNavByEdition(getDocsNav(globalLang), enterpriseDeployed).some((s) => s.pages.some((p) => p.path === qPath))
   return {
     path: known ? qPath : 'index',
     /** 路径非法：需要提示用户「链接已失效」 */
     pathCorrected: !known,
+    /** 请求的是企业版专属页且当前部署不含企业模块：给专门文案而非「链接失效」 */
+    enterpriseOnlyBlocked: !known && ENTERPRISE_ONLY_DOC_PATHS.includes(qPath),
     /** URL 语言与全局不一致（含未带 lang 参数）：静默同步，不算链接失效 */
     langMismatch: !!urlLang && urlLang !== globalLang,
     langMissing: !urlLang
@@ -305,7 +321,9 @@ watch(lang, (newLang, oldLang) => {
   if (newLang === oldLang) return
   const navExists =
     path.value === 'index' ||
-    getDocsNav(newLang).some((s) => s.pages.some((p) => p.path === path.value))
+    filterNavByEdition(getDocsNav(newLang), enterprise.enterpriseEdition).some((s) =>
+      s.pages.some((p) => p.path === path.value)
+    )
   if (!navExists) path.value = 'index'
   notice.value = ''
   void loadContent()
@@ -361,13 +379,17 @@ function onContentClick(e: MouseEvent) {
 let firstLoad = true
 watch(
   () => [route.query.lang, route.query.path],
-  () => {
+  async () => {
     const rawLang = route.query.lang
     const rawPath = route.query.path
     const urlLang = typeof rawLang === 'string' && rawLang ? rawLang : ''
     const qPath = typeof rawPath === 'string' && rawPath ? rawPath : 'index'
+    // 部署形态过滤的前提是知道 edition：先确保企业功能位加载完成（幂等 + 并发去重）。
+    // 匿名/纯 OSS/请求失败都会以 community 兜底，不会卡住页面。
+    await enterprise.ensureLoaded()
     const globalLang = lang.value
-    const normalized = normalizeDocRoute(urlLang, qPath, globalLang)
+    const deployed = enterprise.enterpriseEdition
+    const normalized = normalizeDocRoute(urlLang, qPath, globalLang, deployed)
     const changed = normalized.path !== path.value
     if (changed || firstLoad) notice.value = ''
 
@@ -378,9 +400,13 @@ watch(
       // 只有 path 非法才提示；语言参数不一致属于正常的全局同步，不打扰用户。
       // 首次挂载（直接拿旧链接打开）静默回落，应用内点到失效链接才提示。
       if (normalized.pathCorrected && !firstLoad) {
-        notice.value = globalLang === 'en'
-          ? 'That help link is no longer valid. You have been taken to the help home page.'
-          : '这个帮助链接已失效，已为你回到帮助首页。'
+        notice.value = normalized.enterpriseOnlyBlocked
+          ? (globalLang === 'en'
+            ? 'This page documents enterprise-edition features and is not part of the current deployment. You have been taken to the help home page.'
+            : '这一页介绍的是企业版功能，当前部署不包含它，已为你回到帮助首页。')
+          : (globalLang === 'en'
+            ? 'That help link is no longer valid. You have been taken to the help home page.'
+            : '这个帮助链接已失效，已为你回到帮助首页。')
       }
     }
     path.value = normalized.path

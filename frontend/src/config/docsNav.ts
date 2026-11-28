@@ -53,6 +53,7 @@ export const docsNavZh: DocSection[] = [
       { title: '团队用量', path: 'team/usage' },
       { title: '接入管理', path: 'team/providers' },
       { title: '虚拟模型', path: 'team/model-pools' },
+      { title: '模型能力档案', path: 'team/model-capabilities' },
       { title: '路由规则', path: 'team/routing-rules' },
       { title: '全部密钥', path: 'team/all-keys' },
       { title: '调用观测', path: 'team/observability' },
@@ -64,6 +65,8 @@ export const docsNavZh: DocSection[] = [
     pages: [
       { title: '账号管理', path: 'system/accounts' },
       { title: '模型配置', path: 'system/model-config' },
+      { title: '租户管理', path: 'system/tenants' },
+      { title: '企业管理', path: 'system/enterprise' },
       { title: '审计与版本', path: 'system/audit-versions' },
       { title: '全局配置', path: 'system/global' }
     ]
@@ -95,6 +98,7 @@ export const docsNavEn: DocSection[] = [
       { title: 'Team Usage', path: 'team/usage' },
       { title: 'Providers', path: 'team/providers' },
       { title: 'Virtual Models', path: 'team/model-pools' },
+      { title: 'Model Capabilities', path: 'team/model-capabilities' },
       { title: 'Routing Rules', path: 'team/routing-rules' },
       { title: 'All Keys', path: 'team/all-keys' },
       { title: 'Call History', path: 'team/observability' },
@@ -106,6 +110,8 @@ export const docsNavEn: DocSection[] = [
     pages: [
       { title: 'Accounts', path: 'system/accounts' },
       { title: 'Model Configuration', path: 'system/model-config' },
+      { title: 'Tenants', path: 'system/tenants' },
+      { title: 'Enterprise', path: 'system/enterprise' },
       { title: 'Audit & Versions', path: 'system/audit-versions' },
       { title: 'Global Settings', path: 'system/global' }
     ]
@@ -122,6 +128,31 @@ export const docsNavEn: DocSection[] = [
 /** 按语言取导航 */
 export function getDocsNav(lang: string): DocSection[] {
   return lang === 'en' ? docsNavEn : docsNavZh
+}
+
+/**
+ * 企业版专属文档 path（2026-11-28 方案 B：部署形态过滤）。
+ *
+ * 纯 OSS 部署（enterpriseStore.enterpriseEdition = false）不展示这两页，
+ * 后端 DocsController 对同样口径的路径 fail-closed 拒绝返回——
+ * 前端导航、URL 白名单、后端接口三处同源，改这里必须同步改 DocsController。
+ * 与 menu.ts 的 ENTERPRISE_ONLY_SUBS 口径对应：两页对应的「租户管理」「企业管理」
+ * 菜单项在社区版整项灰态锁，文档跟着隐藏。
+ *
+ * 注意：共用页里「企业版还会多一个××」的一句话标注不在此列（有意保留）——
+ * OSS 界面上真实存在商业版徽章与灰态锁，文档需要解释它们。
+ */
+export const ENTERPRISE_ONLY_DOC_PATHS: string[] = ['system/tenants', 'system/enterprise']
+
+/**
+ * 按部署形态过滤导航：纯 OSS 隐藏企业版专属页，空分组一并移除。
+ * 纯函数，不依赖 store；调用方负责传入当前部署形态并保证响应式重算。
+ */
+export function filterNavByEdition(sections: DocSection[], enterpriseDeployed: boolean): DocSection[] {
+  if (enterpriseDeployed) return sections
+  return sections
+    .map(sec => ({ ...sec, pages: sec.pages.filter(p => !ENTERPRISE_ONLY_DOC_PATHS.includes(p.path)) }))
+    .filter(sec => sec.pages.length > 0)
 }
 
 /** 按语言取首页入口 */

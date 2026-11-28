@@ -237,7 +237,7 @@
       "x004": "failed",
       "x005": " calls",
       "x006": "<br/>Cost ¥{amount}<br/>Tokens {tokens}<br/>{calls} calls",
-      "x007": "<br/>Cost ¥{amount}<br/>{percent}% of total",
+      "x007": "<br/>Cost ¥{amount}<br/>Tokens {tokens}<br/>{percent}% of total",
       "t030": "Community edition: amount statistics are an enterprise feature, so this page shows token usage. Amounts become available in the enterprise edition once billing is enabled.",
       "t031": "This month · by usage",
       "t032": "By usage",

@@ -16,6 +16,7 @@ import org.unreal.modelrouter.common.controller.response.RouterResponse;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -42,6 +43,29 @@ public class DocsController {
     private static final Pattern SAFE_LANG = Pattern.compile("^[a-zA-Z0-9_-]+$");
 
     /**
+     * 企业版专属文档 path（2026-11-28 方案 B：部署形态过滤）。
+     *
+     * <p>与前端 docsNav 的 {@code ENTERPRISE_ONLY_DOC_PATHS} 三处同口径
+     * （前端导航 / URL 白名单 / 本接口）：纯 OSS 部署不提供这两页——导航隐藏、
+     * 接口 fail-closed 拒绝，避免 OSS 用户读到纯企业版内容（租户管理 / 企业管理）。</p>
+     *
+     * <p>共用页里「企业版还会多一个××」的一句话标注不在过滤之列（有意保留）：
+     * OSS 界面上真实存在商业版徽章与灰态锁，文档需要解释它们。</p>
+     */
+    private static final Set<String> ENTERPRISE_ONLY_DOC_PATHS =
+            Set.of("system/tenants", "system/enterprise");
+
+    /**
+     * 企业部署探测：企业自包含 UI 模块 {@code static/admin/enterprise/module.mjs}
+     * 随企业 jar 交付（A2 前端分离架构的锚点文件），纯 OSS 构建没有该资源。
+     * classpath 资源探测比类名探测稳——module.mjs 是企业 UI 模块的核心交付物，
+     * 存在即视为企业部署。进程内静态判定一次，功能位在一次会话内不会变（换 license 需重启），
+     * 与前端 enterprise store 的「只请求一次」口径一致。
+     */
+    private static final boolean ENTERPRISE_MODULE_PRESENT =
+            new ClassPathResource("static/admin/enterprise/module.mjs").exists();
+
+    /**
      * 读取单篇文档原文。
      *
      * @param lang 语言：zh（默认）或 en
@@ -64,6 +88,15 @@ public class DocsController {
         if (normalizedLang == null || normalizedPath == null) {
             return ResponseEntity.badRequest().body(
                     RouterResponse.error("文档路径不合法", "DOC_PATH_INVALID"));
+        }
+
+        // 方案 B：纯 OSS 部署不提供企业版专属页（与前端导航过滤同口径）。
+        // 返回与「文档不存在」完全一致的响应，不在错误码上区分——不让接口成为
+        // 探测部署形态的旁路（虽然这两页内容本身并不敏感，口径上仍按不存在处理）。
+        if (!ENTERPRISE_MODULE_PRESENT && ENTERPRISE_ONLY_DOC_PATHS.contains(normalizedPath)) {
+            log.info("Enterprise-only doc requested on community deployment: {}", normalizedPath);
+            return ResponseEntity.ok(
+                    RouterResponse.error("文档不存在: " + normalizedPath, "DOC_NOT_FOUND"));
         }
 
         ClassPathResource resource = new ClassPathResource("docs/" + normalizedLang + "/" + normalizedPath + ".md");

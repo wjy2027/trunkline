@@ -20,6 +20,7 @@
 | --- | --- |
 | 接一家新厂商、给模型配价格 | [接入管理](team/providers.md) |
 | 给员工建一个能用的模型名 | [虚拟模型](team/model-pools.md) |
+| 选型犯难，看各模型擅长什么 | [模型能力档案](team/model-capabilities.md) |
 | 给员工发密钥、调额度、排查「用不了」 | [全部密钥](team/all-keys.md) |
 | 看全公司花了多少、谁在用 | [团队用量](team/usage.md) |
 | 查某次调用为什么失败 | [调用观测](team/observability.md) |
@@ -32,6 +33,8 @@
 | --- | --- |
 | 开账号、改角色、填部门 | [账号管理](system/accounts.md) |
 | 厂商预设、模型分类、接入协议 | [模型配置](system/model-config.md) |
+| 给多家子公司／团队各开一个独立空间 | [租户管理](system/tenants.md)（企业版） |
+| 许可证、安全防护、密钥审批这些企业功能 | [企业管理](system/enterprise.md)（企业版） |
 | 改全网关的默认设置 | [全局配置](system/global.md) |
 | 查谁改过什么、把配置退回去 | [审计与版本](system/audit-versions.md) |
 

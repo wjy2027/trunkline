@@ -18,7 +18,7 @@ Your bill is a table of days against model names. Three cards on top show this m
 | --- | --- |
 | Select month / Refresh | Change the month and reload the data |
 | Month total / Call count / Same period last month | Three headline numbers for comparison |
-| Detail table | One row per day, one column per virtual model you used, plus a daily total and a month total |
+| Detail table | One row per day, one column per virtual model you used, plus a daily total and a month total; enterprise edition also shows a small token figure under each amount |
 
 ## Common tasks
 

@@ -4,7 +4,7 @@
 
 ## What this page does
 
-Despite the menu name, this page is a storage self-check, not a live failure dashboard. It shows where gateway state (circuit breaker state, routing state, quotas) is stored, which store is active and healthy, and lets you sync or restore. **Single-server setups normally do not need it**.
+Despite the menu name, this page is a storage self-check, not a live failure dashboard. It shows where gateway state (circuit breaker state, routing state, quotas) is stored, which store is active and healthy, and lets you sync or restore. **Single-server setups normally do not need it**. The enterprise edition adds a "Security posture" tab summarizing moderation and sensitive-data blocking — a security overview for administrators, unrelated to storage.
 
 ## When you need it
 

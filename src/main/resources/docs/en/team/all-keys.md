@@ -41,8 +41,12 @@ Operations staff and administrators create keys here, choose which virtual model
 **Change a quota**
 
 1. Click Quota
-2. Edit the monthly quota
-3. Save quota
+2. The main field is the **monthly Token limit**; enterprise billing also shows **monthly amount (¥)** — an estimate converted from the model prices, saved back as a Token limit
+3. Finer caps (per-minute / hourly / daily, by requests or tokens) live in the "Advanced limits (rarely touched)" section; a monthly value is usually enough
+4. You can also apply a preset to fill a common combination in one click
+5. Save quota
+
+> Limits do not block requests? The quota ledger must be enabled in Global Settings → Quota first.
 
 ## If something goes wrong
 

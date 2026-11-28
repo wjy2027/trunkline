@@ -27,5 +27,14 @@
 | fail-open | Whether to allow or block requests when the quota service is unavailable | Global Settings |
 | Config version | A saved copy of each config change, so a bad change can be rolled back | Audit & Versions |
 | Audit log | A record of who logged in or changed keys and configuration, and when | Audit & Versions |
+| Amount limit | A cap on "how much money per month", alongside the token limit; exceeding it blocks calls | All Keys, Tenants |
+| Advanced pricing | Finer pricing than a flat rate: tiered (bigger single calls get cheaper rates) and time-window prices | Providers, Global Settings |
+| PII masking | Replacing phone or ID numbers with 138****5678 **before writing logs**; what the model and user see is unchanged | Global Settings → Misc |
+| Data-loss prevention | Blocking or masking sensitive content found in requests or responses | Enterprise → Guardrails |
+| Key vault | Vendor API keys stored encrypted, never shown in plain text | Enterprise → Guardrails |
+| Content moderation | Scoring model replies and blocking those likely to violate policy | Enterprise → Guardrails |
+| Tenant | One isolated workspace: accounts, keys and bills are invisible across tenants | Tenants (enterprise) |
+| Compliance evidence / archive | Audit records chained tamper-evidently and locked into write-once storage for audits | Audit & Versions (enterprise) |
+| Department registry | Departments must be registered first, each with a stable ID, for grouping and per-department limits; the account editor's dropdown only accepts registered departments | Accounts → Add department (enterprise: Organization tab) |
 
 > Numbers like 401 / 403 / 404 after a term: 401 means the key is wrong, 403 means no permission, 404 means that name does not exist. Those three cover most cases.

@@ -20,6 +20,7 @@ These five pages are the "My Workspace" group — the pages employees can see th
 | --- | --- |
 | Add a provider, set model prices | [Providers](team/providers.md) |
 | Create a model name employees can use | [Virtual Models](team/model-pools.md) |
+| Compare what each model is good at | [Model Capabilities](team/model-capabilities.md) |
 | Issue keys, adjust quotas, debug access | [All Keys](team/all-keys.md) |
 | See company spend and who is using it | [Team Usage](team/usage.md) |
 | Find out why a request failed | [Call History](team/observability.md) |
@@ -32,6 +33,8 @@ These five pages are the "My Workspace" group — the pages employees can see th
 | --- | --- |
 | Create accounts, change roles, fill departments | [Accounts](system/accounts.md) |
 | Provider presets, model categories, adapters | [Model Configuration](system/model-config.md) |
+| Give each subsidiary its own isolated workspace | [Tenants](system/tenants.md) (enterprise) |
+| Licensing, security guardrails, key approval | [Enterprise](system/enterprise.md) (enterprise) |
 | Change gateway-wide defaults | [Global Settings](system/global.md) |
 | See who changed what, roll back a config | [Audit & Versions](system/audit-versions.md) |
 

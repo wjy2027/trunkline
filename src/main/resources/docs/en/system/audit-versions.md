@@ -4,7 +4,7 @@
 
 ## What this page does
 
-Administrators only. The audit log records sign-ins, key changes, authentication failures and suspicious activity. Config versions keep a copy of each change so an earlier version can be applied again.
+Administrators only. The audit log records sign-ins, key changes, authentication failures and suspicious activity — including changes to amount limits. Config versions keep a copy of each change so an earlier version can be applied again. The enterprise edition adds three tabs: **Compliance evidence** (audit records chained tamper-evidently for audits), **Compliance archive** (records locked into write-once storage) and **Security report** (a summary of security events over a period).
 
 ## When you need it
 

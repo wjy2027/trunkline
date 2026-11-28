@@ -4,7 +4,7 @@
 
 ## What this page does
 
-Administrators only; operations staff see the entry but get a permission notice. Three tabs: provider templates (used when adding a provider), model categories, and custom adapters. In most cases you do not need this page — connecting a vendor picks the right format automatically.
+Administrators only; operations staff see the entry but get a permission notice. Three base tabs: provider templates (used when adding a provider), model categories, and custom adapters. The enterprise edition adds **prompt templates** (store reusable prompts) and **adapter lifecycle** (bring connection formats online or offline). In most cases you do not need this page — connecting a vendor picks the right format automatically.
 
 ## When you need it
 

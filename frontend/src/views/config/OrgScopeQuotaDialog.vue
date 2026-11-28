@@ -10,14 +10,11 @@
       <el-form-item :label="t('orgScopeQuota.scopeId')" required>
         <el-input v-model="form.scopeId" :disabled="scopeIdLocked" :placeholder="t('orgScopeQuota.scopeIdPlaceholder')" />
       </el-form-item>
-      <el-form-item
-        v-for="field in visibleFieldList"
-        :key="field"
-        :label="t(`orgScopeQuota.${field}`)"
-      >
-        <el-input-number v-model="form[field]" :min="0" controls-position="right" />
+      <!-- 主字段：每月 Token 上限（2026-11-28，对齐企业版/全部密钥表单：月度为主，其余窗口进高级限制） -->
+      <el-form-item v-if="isFieldVisible('monthTokens')" :label="t('orgScopeQuota.monthTokens')">
+        <el-input-number v-model="form.monthTokens" :min="0" :step="10000" controls-position="right" style="width: 100%" />
       </el-form-item>
-      <!-- 月度金额上限（2026-11-28，对齐全全部密钥配额表单口径）：企业版金额账本，按当月实际花费限制 -->
+      <!-- 月度金额上限：企业版金额账本，按当月实际花费限制 -->
       <el-form-item v-if="amountAvailable" :label="t('orgScopeQuota.monthlyAmount')">
         <el-input-number
           v-model="amountLimitYuan"
@@ -26,11 +23,23 @@
           :step="10"
           controls-position="right"
           :placeholder="t('orgScopeQuota.monthlyAmountPlaceholder')"
+          style="width: 100%"
         />
         <div class="form-hint">{{ t('orgScopeQuota.monthlyAmountHint') }}</div>
       </el-form-item>
       <el-alert v-if="!amountAvailable" :title="t('orgScopeQuota.monthlyAmountUnavailable')" type="info" :closable="false" show-icon />
-      <el-alert :title="t('orgScopeQuota.zeroMeansUnlimited')" type="info" :closable="false" show-icon />
+      <!-- 高级限制（一般不用动）：每日 / 每小时 / 每分钟 / 每月请求窗口 -->
+      <el-collapse class="quota-advanced">
+        <el-collapse-item :title="t('orgScopeQuota.advancedLimits')" name="quota-advanced">
+          <div class="quota-grid">
+            <div v-for="field in advancedFieldList" :key="field" class="quota-grid__item">
+              <div class="quota-grid__label">{{ t(`orgScopeQuota.${field}`) }}</div>
+              <el-input-number v-model="form[field]" :min="0" controls-position="right" style="width: 100%" />
+            </div>
+          </div>
+          <div class="form-hint">{{ t('orgScopeQuota.zeroMeansUnlimited') }}</div>
+        </el-collapse-item>
+      </el-collapse>
     </el-form>
     <template #footer>
       <el-button @click="visible = false">{{ t('quotaConfig.cancel') }}</el-button>
@@ -109,8 +118,14 @@ const form = ref<FormState>(emptyForm())
 
 const dialogTitle = computed(() => t('orgScopeQuota.quotaFor', { id: form.value.scopeId || props.scopeId || '' }))
 
-/** 当前窗口下可见字段（保持固定顺序） */
-const visibleFieldList = computed<QuotaField[]>(() => visibleFields())
+/** 高级限制字段（每日 / 每小时 / 每分钟 / 每月请求窗口，2026-11-28 对齐企业版/全部密钥表单） */
+const ADVANCED_FIELDS: QuotaField[] = [
+  'dayRequests', 'hourRequests', 'dayTokens', 'hourTokens', 'minuteRequests', 'monthRequests',
+]
+/** 当前窗口下可见的高级字段（保持固定顺序） */
+const advancedFieldList = computed<QuotaField[]>(() =>
+  ADVANCED_FIELDS.filter(f => visibleFields().includes(f)))
+const isFieldVisible = (field: QuotaField): boolean => visibleFields().includes(field)
 
 // ── 月度金额上限（2026-11-28）：企业金额账本 /api/config/quota-amount，当月（YYYY-MM）生效 ──
 /** org scope → 金额账本 scopeType（与 EnterpriseAmountQuotaExtension.scopesOf 同口径） */
@@ -244,6 +259,23 @@ const handleSave = async () => {
   line-height: 1.4;
   color: var(--ja-text-secondary, var(--el-text-color-secondary));
   width: 100%;
+}
+/* 高级限制折叠区：双列网格（与「全部密钥」配额表单一致） */
+.quota-advanced {
+  width: 100%;
+}
+.quota-advanced :deep(.el-collapse-item__content) {
+  padding-bottom: 8px;
+}
+.quota-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.quota-grid__label {
+  font-size: 12px;
+  color: var(--ja-text-secondary, var(--el-text-color-secondary));
+  margin-bottom: 4px;
 }
 </style>
 

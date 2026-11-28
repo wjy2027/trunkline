@@ -269,39 +269,46 @@
   >
       <div class="quota-block">
         <div class="form-tip">{{ t('pool.quotaSectionHint') }}</div>
-        <div class="quota-grid">
-          <!-- 2026-11-28：字段随全局统计窗口联动（窗口关闭则不显示） -->
-          <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaRatePerMinute') }}</span>
-            <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" size="small" />
-          </div>
-          <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaHourlyRequest') }}</span>
-            <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" size="small" :disabled="!multiWindowEnforced" />
-          </div>
-          <div v-if="isQuotaFieldVisible('hourTokens')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaHourlyToken') }}</span>
-            <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
-          </div>
-          <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaDailyRequest') }}</span>
-            <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" size="small" />
-          </div>
-          <div v-if="isQuotaFieldVisible('dayTokens')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaDailyToken') }}</span>
-            <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" size="small" />
-          </div>
-          <div v-if="isQuotaFieldVisible('monthRequests')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaMonthlyRequest') }}</span>
-            <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
-          </div>
-          <div v-if="isQuotaFieldVisible('monthTokens')" class="quota-field">
-            <span class="quota-label">{{ t('pool.quotaMonthlyToken') }}</span>
-            <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" size="small" :disabled="!multiWindowEnforced" />
-          </div>
-        <div v-if="!multiWindowEnforced" class="quota-field quota-field--wide">
-          <span class="quota-hint quota-hint--warn">{{ t('apiKeys.quotaForm.inertFieldHint') }}</span>
+        <!-- 主字段：每月 Token 上限（2026-11-28 对齐租户配额表单：月度为主，其余窗口进高级限制） -->
+        <div v-if="isQuotaFieldVisible('monthTokens')" class="quota-field quota-field--wide">
+          <span class="quota-label">{{ t('pool.quotaMonthlyToken') }}</span>
+          <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
         </div>
+        <!-- 高级限制（一般不用动）：每日 / 每小时 / 每分钟 / 每月请求窗口 -->
+        <el-collapse class="quota-advanced">
+          <el-collapse-item :title="t('apiKeys.quotaForm.advancedLimits')" name="quota-advanced">
+            <div class="quota-grid">
+              <!-- 2026-11-28：字段随全局统计窗口联动（窗口关闭则不显示） -->
+              <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaRatePerMinute') }}</span>
+                <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" size="small" style="width: 100%" />
+              </div>
+              <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaHourlyRequest') }}</span>
+                <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+              </div>
+              <div v-if="isQuotaFieldVisible('hourTokens')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaHourlyToken') }}</span>
+                <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+              </div>
+              <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaDailyRequest') }}</span>
+                <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" size="small" style="width: 100%" />
+              </div>
+              <div v-if="isQuotaFieldVisible('dayTokens')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaDailyToken') }}</span>
+                <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" size="small" style="width: 100%" />
+              </div>
+              <div v-if="isQuotaFieldVisible('monthRequests')" class="quota-field">
+                <span class="quota-label">{{ t('pool.quotaMonthlyRequest') }}</span>
+                <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+              </div>
+            </div>
+            <div v-if="!multiWindowEnforced" class="quota-field quota-field--wide">
+              <span class="quota-hint quota-hint--warn">{{ t('apiKeys.quotaForm.inertFieldHint') }}</span>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
         <div class="quota-field quota-field--wide">
           <span class="quota-label">{{ t('pool.quotaAlertThreshold') }}</span>
           <el-slider
@@ -316,7 +323,6 @@
         </div>
       </div>
       <div class="form-tip">{{ t('pool.quotaUnlimitedHint') }}</div>
-    </div>
     <template #footer>
       <el-button @click="quotaVisible = false">{{ t('pool.cancel') }}</el-button>
       <el-button type="primary" :loading="saving" @click="saveQuota">{{ t('pool.quotaSave') }}</el-button>
@@ -1356,6 +1362,18 @@ onMounted(() => {
 /* ---------- 额度与限速（独立配额对话框） ---------- */
 .quota-block {
   width: 100%;
+}
+
+.quota-advanced {
+  width: 100%;
+  margin: 4px 0 8px;
+}
+.quota-advanced :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  color: var(--ja-text-secondary, var(--el-text-color-secondary));
+}
+.quota-advanced :deep(.el-collapse-item__content) {
+  padding-bottom: 8px;
 }
 
 .quota-grid {

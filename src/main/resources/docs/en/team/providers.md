@@ -22,6 +22,10 @@ Adding a new AI vendor happens here. "Providers" connects the vendor and discove
 | Add provider | Pick a preset, enter a name and the vendor API key, then discover models |
 | Model Management | Model name, vendor, status, circuit breaker / rate limits, three-tier prices (input / output / cache), quota |
 
+> Quota forms here look the same as in All Keys: the main field is the monthly Token limit; finer caps sit in "Advanced limits (rarely touched)".
+>
+> Advanced pricing (enterprise): a plain price is one flat rate per million tokens. Advanced pricing lets you set **tiered prices** (a single call with more input tokens gets a cheaper flat rate) or **time-window prices** (from procurement contracts). The entry point is in Model Management; the master switch is in Global Settings → Misc.
+
 ## Common tasks
 
 **Add a vendor**

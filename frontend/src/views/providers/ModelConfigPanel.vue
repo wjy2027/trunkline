@@ -436,46 +436,46 @@
       :title="quotaForm.name"
     />
     <el-form v-if="quotaForm" label-width="140px">
-      <!-- 2026-11-28：各窗口分组随全局统计窗口联动（窗口关闭则整组不显示） -->
-      <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-group-title">{{ t('modelConfig.quotaGroupRate') }}</div>
-      <el-form-item v-if="isQuotaFieldVisible('minuteRequests')" label="每分钟请求上限">
-        <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" />
-        <span class="field-hint">{{ t('modelConfig.fieldPerMinute') }}</span>
-      </el-form-item>
-
-      <div v-if="isQuotaFieldVisible('hourRequests') || isQuotaFieldVisible('hourTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupHourly') }}</div>
-      <el-form-item v-if="isQuotaFieldVisible('hourRequests')" label="请求上限">
-        <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" />
-        <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
-      </el-form-item>
-      <el-form-item v-if="isQuotaFieldVisible('hourTokens')" label="Token 上限">
-        <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" />
+      <!-- 主字段：每月 Token 上限（2026-11-28 对齐租户配额表单：月度为主，其余窗口进高级限制） -->
+      <el-form-item v-if="isQuotaFieldVisible('monthTokens')" :label="t('apiKeys.quotaForm.monthlyTokenLimit')">
+        <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" :disabled="!multiWindowEnforced" style="width: 100%" />
         <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
       </el-form-item>
 
-      <div v-if="isQuotaFieldVisible('dayRequests') || isQuotaFieldVisible('dayTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupDaily') }}</div>
-      <el-form-item v-if="isQuotaFieldVisible('dayRequests')" label="请求上限">
-        <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" />
-        <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
-      </el-form-item>
-      <el-form-item v-if="isQuotaFieldVisible('dayTokens')" label="Token 上限">
-        <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" />
-        <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
-      </el-form-item>
-
-      <div v-if="isQuotaFieldVisible('monthRequests') || isQuotaFieldVisible('monthTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupMonthly') }}</div>
-      <!-- 每月限额仅账本开启时真实生效；账本关闭时禁用（与「全部密钥」页口径一致） -->
-      <el-form-item v-if="isQuotaFieldVisible('monthRequests')" label="请求上限">
-        <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" :disabled="!multiWindowEnforced" />
-        <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
-      </el-form-item>
-      <el-form-item v-if="isQuotaFieldVisible('monthTokens')" label="Token 上限">
-        <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" :disabled="!multiWindowEnforced" />
-        <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
-      </el-form-item>
-      <div v-if="!multiWindowEnforced" class="field-hint field-hint--warn">
-        {{ t('apiKeys.quotaForm.inertFieldHint') }}
-      </div>
+      <!-- 高级限制（一般不用动）：每日 / 每小时 / 每分钟 / 每月请求窗口，紧凑两列（与虚拟模型页一致） -->
+      <el-collapse class="quota-advanced">
+        <el-collapse-item :title="t('apiKeys.quotaForm.advancedLimits')" name="quota-advanced">
+          <div class="quota-compact-grid">
+            <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaPerMinute') }}</span>
+              <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" size="small" style="width: 100%" />
+            </div>
+            <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaHourlyRequest') }}</span>
+              <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+            </div>
+            <div v-if="isQuotaFieldVisible('hourTokens')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaHourlyToken') }}</span>
+              <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+            </div>
+            <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaDailyRequest') }}</span>
+              <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" size="small" style="width: 100%" />
+            </div>
+            <div v-if="isQuotaFieldVisible('dayTokens')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaDailyToken') }}</span>
+              <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" size="small" style="width: 100%" />
+            </div>
+            <div v-if="isQuotaFieldVisible('monthRequests')" class="quota-compact-field">
+              <span class="quota-compact-label">{{ t('modelConfig.quotaMonthlyRequest') }}</span>
+              <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" style="width: 100%" />
+            </div>
+          </div>
+          <div v-if="!multiWindowEnforced" class="field-hint field-hint--warn">
+            {{ t('apiKeys.quotaForm.inertFieldHint') }}
+          </div>
+        </el-collapse-item>
+      </el-collapse>
 
       <div class="quota-group-title">{{ t('modelConfig.quotaGroupAlert') }}</div>
       <el-form-item label="配额告警阈值">
@@ -1768,6 +1768,40 @@ onMounted(async () => {
 
 .section-tip {
   margin-bottom: 10px;
+}
+
+/* 紧凑两列：label 左、控件右（与虚拟模型页 quota-field 同风格） */
+.quota-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 4px 0 8px;
+}
+.quota-compact-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.quota-compact-field .el-input-number {
+  flex: 1;
+}
+.quota-compact-label {
+  font-size: 12px;
+  color: var(--ja-text-secondary, var(--el-text-color-secondary));
+  white-space: nowrap;
+}
+
+.quota-advanced {
+  width: 100%;
+  margin: 4px 0 8px;
+}
+.quota-advanced :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  color: var(--ja-text-secondary, var(--el-text-color-secondary));
+}
+.quota-advanced :deep(.el-collapse-item__content) {
+  padding-bottom: 8px;
 }
 
 .quota-group-title {

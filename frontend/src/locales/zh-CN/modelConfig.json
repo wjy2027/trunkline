@@ -53,6 +53,12 @@
     "limitDailyReq": "每日 {n} 次",
     "limitDailyToken": "每日 {n} Token",
     "limitMonthlyReq": "每月 {n} 次",
-    "limitMonthlyToken": "每月 {n} Token"
+    "limitMonthlyToken": "每月 {n} Token",
+    "quotaPerMinute": "限速（次/分钟）",
+    "quotaHourlyRequest": "每小时（次）",
+    "quotaHourlyToken": "每小时（Token）",
+    "quotaDailyRequest": "每日（次）",
+    "quotaDailyToken": "每日（Token）",
+    "quotaMonthlyRequest": "每月（次）"
   }
 }

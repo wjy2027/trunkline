@@ -42,8 +42,10 @@ Employees do not type vendor model names. They type a company-wide virtual model
 **Set limits**
 
 1. Click Quota
-2. Fill per-minute / hourly / daily / monthly caps and an alert threshold
-3. Save quota
+2. The main field is the **monthly Token limit** — usually the only one you need
+3. Per-minute / hourly / daily caps sit in the "Advanced limits (rarely touched)" section, two fields per row
+4. Adjust the alert threshold (at what usage percentage to warn)
+5. Save quota
 
 ## If something goes wrong
 

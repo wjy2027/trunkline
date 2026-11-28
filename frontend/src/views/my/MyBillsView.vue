@@ -327,18 +327,19 @@ watch(
           <template #default="{ row }">{{ formatDate(row.usageDate) }}</template>
         </el-table-column>
 
-        <!-- 动态列：每个虚拟模型一列（企业版=金额口径，社区版=Token 口径） -->
+        <!-- 动态列：每个虚拟模型一列（企业版=金额+Token 双行，社区版=Token 口径） -->
         <el-table-column
           v-for="vm in virtualModelColumns"
           :key="vm"
           :label="vm"
-          min-width="120"
+          min-width="130"
           align="right"
         >
           <template #default="{ row }">
-            <span v-if="billingEnabled && cellAmount(row, vm) !== null" class="cell-amount">
-              {{ money(cellAmount(row, vm) ?? 0) }}
-            </span>
+            <template v-if="billingEnabled && cellAmount(row, vm) !== null">
+              <span class="cell-amount">{{ money(cellAmount(row, vm) ?? 0) }}</span>
+              <div class="cell-tokens">{{ formatNumber(cellTokens(row, vm) ?? 0) }}</div>
+            </template>
             <span v-else-if="!billingEnabled && cellTokens(row, vm) !== null" class="cell-amount">
               {{ formatNumber(cellTokens(row, vm) ?? 0) }}
             </span>
@@ -346,9 +347,12 @@ watch(
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('v.mb.t013')" width="120" align="right">
+        <el-table-column :label="t('v.mb.t013')" width="130" align="right">
           <template #default="{ row }">
-            <b v-if="billingEnabled">{{ money(row.amount) }}</b>
+            <template v-if="billingEnabled">
+              <b>{{ money(row.amount) }}</b>
+              <div class="cell-tokens">{{ formatNumber(row.totalTokens) }}</div>
+            </template>
             <b v-else>{{ formatNumber(row.totalTokens) }}</b>
           </template>
         </el-table-column>
@@ -396,6 +400,8 @@ watch(
 .price-hint { margin-bottom: 12px; }
 
 .cell-amount { font-variant-numeric: tabular-nums; }
+/* 企业版单元格第二行：token 用量小字（2026-11-28） */
+.cell-tokens { font-size: 11px; color: var(--ja-text-secondary, var(--el-text-color-secondary)); font-variant-numeric: tabular-nums; }
 .cell-none { color: var(--ja-text-placeholder); }
 
 /* 空态 + 出口按钮 */

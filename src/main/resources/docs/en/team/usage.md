@@ -19,9 +19,9 @@ This page is for operations staff and administrators. Switch between whole compa
 | --- | --- |
 | Whole company / By department + month | Set the scope and time period |
 | Four summary cards | People, requests, usage and cost |
-| Model ranking / usage type chart | Where most of the usage goes |
-| Department usage / Member usage | Two levels of detail: people, requests, usage, cost |
-| Models behind a virtual model | Maps the employee-facing name to the real models and their cost |
+| Model ranking / usage type chart | Where most of the usage goes; enterprise edition shows cost and token volume side by side |
+| Department usage / Member usage | Two levels of detail: people, requests, tokens, cost |
+| Models behind a virtual model | Maps the employee-facing name to the real models, with tokens and cost per row |
 
 ## Common tasks
 
