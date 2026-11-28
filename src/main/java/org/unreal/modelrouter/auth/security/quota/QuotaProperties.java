@@ -68,6 +68,30 @@ public class QuotaProperties {
     private boolean failOpen = true;
 
     /**
+     * 用户维度额度是否启用（默认 false：零行为变更）。
+     *
+     * <p>启用后按 {@code ApiKey.holder} 跨 Key 归集判定用户额度。与总开关
+     * {@link #isEnabled()} 是「与」关系——总开关关闭时本开关无效。</p>
+     */
+    private boolean userScopeEnabled = false;
+
+    /**
+     * 部门维度额度是否启用（默认 false：零行为变更）。
+     *
+     * <p>启用后按 holder 所属行政部门归集判定部门额度。需要认证时机解析
+     * holder→department 并写请求属性（见 ServiceRequestHandler）。</p>
+     */
+    private boolean departmentScopeEnabled = false;
+
+    /**
+     * 租户维度额度是否启用（默认 false：零行为变更）。
+     *
+     * <p>启用后按 Key 绑定的非 default 租户归集判定租户额度；Key 未绑非 default
+     * 租户时本维度自动跳过（与行级过滤器开关无关）。</p>
+     */
+    private boolean tenantScopeEnabled = false;
+
+    /**
      * 内存账本快照落库间隔（秒，默认 60）
      */
     private long flushIntervalSeconds = 60L;

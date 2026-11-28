@@ -84,4 +84,24 @@ class QuotaDimensionTest {
         assertNotNull(dimension.model());
         assertEquals("", dimension.apiKeyId());
     }
+
+    @Test
+    @DisplayName("组织维工厂：用户/部门桶用 __shared__，租户桶用显式 tenantId")
+    void orgScopeFactories_shouldUseSharedSentinelForUserAndDepartment() {
+        final QuotaDimension user = QuotaDimension.ofUser("zhangsan");
+        assertEquals("__shared__", user.tenantId());
+        assertEquals("zhangsan", user.userId());
+        assertEquals("", user.apiKeyId());
+
+        final QuotaDimension dept = QuotaDimension.ofDepartment("研发部");
+        assertEquals("__shared__", dept.tenantId());
+        assertEquals("dept:研发部", dept.userId());
+        assertNotEquals(user, dept);
+
+        final QuotaDimension tenant = QuotaDimension.ofTenant("proj-alpha");
+        assertEquals("proj-alpha", tenant.tenantId());
+        assertEquals("", tenant.userId());
+        // __shared__ 不被 normalizeTenant 折叠
+        assertEquals("__shared__", QuotaDimension.ofUser(null).tenantId());
+    }
 }

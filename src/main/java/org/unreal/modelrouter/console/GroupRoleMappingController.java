@@ -36,7 +36,8 @@ import java.util.UUID;
 @Tag(name = "组角色映射", description = "稳定 deptId 注册表与部门→角色白名单")
 public class GroupRoleMappingController {
 
-    static final String DEPT_KEY = "console.dept-registry";
+    /** 部门注册表 configKey（2026-11-28 起公开：BillingService 部门维度统计复用同一常量）。 */
+    public static final String DEPT_KEY = "console.dept-registry";
     static final String MAP_KEY = "console.group-role-mappings";
 
     /** 允许落入白名单的角色，与 OSS TrunklineRoles 白名单口径一致（禁 IdP 角色透传）。 */
@@ -124,6 +125,34 @@ public class GroupRoleMappingController {
     public ResponseEntity<RouterResponse<Void>> deleteMapping(@PathVariable final String deptId) {
         store.delete(MAP_KEY, "deptId", deptId);
         return ResponseEntity.ok(RouterResponse.success(null));
+    }
+
+    /**
+     * 删除手动登记的部门（2026-11-28）。
+     *
+     * <p><b>来源保护</b>：仅允许删除 {@code DEPT-} 前缀（本控制器 {@link #registerDepartment}
+     * 生成的手动登记部门）；SSO/SCIM 同步的组织部门不落本注册表（组织页合并展示时以
+     * {@code source=sso} 标记），即便未来同步写入也因其 deptId 非该前缀而被拒绝删除。</p>
+     *
+     * <p>级联：删除部门登记的同时清除其组→角色映射（映射依附于 deptId，部门没了映射无意义）。
+     * 账号 {@code department} 是自由文本引用，不随部门删除而清空——历史用量归属保持可读。</p>
+     */
+    @DeleteMapping("/departments/{deptId}")
+    @Operation(summary = "删除手动登记的部门（SSO 同步部门拒绝）")
+    public ResponseEntity<RouterResponse<Void>> deleteDepartment(@PathVariable final String deptId) {
+        if (deptId == null || !deptId.startsWith("DEPT-")) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "仅允许删除手动登记的部门（SSO/SCIM 同步部门不可删除）");
+        }
+        boolean exists = store.list(DEPT_KEY).stream()
+                .anyMatch(d -> deptId.equals(String.valueOf(d.get("deptId"))));
+        if (!exists) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "部门不存在: " + deptId);
+        }
+        store.delete(DEPT_KEY, "deptId", deptId);
+        // 级联清除该部门的角色映射（依附关系，无保留价值）
+        store.delete(MAP_KEY, "deptId", deptId);
+        return ResponseEntity.ok(RouterResponse.success(null, "部门已删除"));
     }
 
     private List<Map<String, Object>> plainList(final List<Map<String, Object>> source) {

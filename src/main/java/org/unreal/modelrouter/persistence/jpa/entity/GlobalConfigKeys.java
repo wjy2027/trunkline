@@ -47,7 +47,12 @@ public final class GlobalConfigKeys {
             "console.group-role-mappings",
             "console.dept-registry",
             // 适配器生命周期：适配器是进程级资产，运行状态全平台一份
-            "console.adapter-lifecycle"
+            "console.adapter-lifecycle",
+            // 组织维额度（用户/部门/租户）：额度定义是平台级策略，各租户看到同一份限额表；
+            // 用量仍按各自 dimension 的租户哨兵记账，配置与用量是两个维度
+            "quota.scope.users",
+            "quota.scope.departments",
+            "quota.scope.tenants"
     );
 
     /**

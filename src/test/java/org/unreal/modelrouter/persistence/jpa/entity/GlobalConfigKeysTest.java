@@ -30,6 +30,14 @@ class GlobalConfigKeysTest {
     }
 
     @Test
+    @DisplayName("组织维额度配置 → 全局共享（额度定义是平台级策略）")
+    void orgScopeQuotaKeysAreGlobal() {
+        assertTrue(GlobalConfigKeys.isGlobal("quota.scope.users"));
+        assertTrue(GlobalConfigKeys.isGlobal("quota.scope.departments"));
+        assertTrue(GlobalConfigKeys.isGlobal("quota.scope.tenants"));
+    }
+
+    @Test
     @DisplayName("console.* 前缀未来新增的功能自动归入全局，无需改常量")
     void newConsolePrefixKeyIsGlobalByPrefix() {
         assertTrue(GlobalConfigKeys.isGlobal("console.some-future-feature"),

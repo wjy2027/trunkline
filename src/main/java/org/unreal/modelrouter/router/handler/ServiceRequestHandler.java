@@ -75,6 +75,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.unreal.modelrouter.auth.security.quota.QuotaEnforcementService.QUOTA_DEPARTMENT_ATTRIBUTE;
+import static org.unreal.modelrouter.auth.security.quota.QuotaEnforcementService.QUOTA_HOLDER_ATTRIBUTE;
+import static org.unreal.modelrouter.auth.security.quota.QuotaEnforcementService.QUOTA_TENANT_ATTRIBUTE;
+
 /**
  * 通用服务请求处理器.
  *
@@ -226,6 +230,15 @@ public class ServiceRequestHandler {
     private QuotaEnforcementService quotaEnforcementService;
 
     /**
+     * 组织维归属解析器（optional）。仅在用户 / 部门额度启用时用于认证后解析 holder→department。
+     *
+     * <p>字段注入而非构造器：避免改动既有 5 参构造器与全部测试构造点；未装配时本段逻辑跳过，
+     * 零行为变化。</p>
+     */
+    @Autowired(required = false)
+    private org.unreal.modelrouter.auth.security.quota.DepartmentResolver departmentResolver;
+
+    /**
      * B2 / 方案 3.7：预算前置校验服务（可选注入）。
      *
      * <p>必须在实例选择与下游调用之前执行——{@code BillingProvider.charge()} 是请求成功、
@@ -340,10 +353,39 @@ public class ServiceRequestHandler {
                     if (keyTenantId != null && !keyTenantId.isBlank()) {
                         exchange.getAttributes().put(TENANT_ID_ATTRIBUTE, keyTenantId);
                         httpRequest.getAttributes().put(TENANT_ID_ATTRIBUTE, keyTenantId);
+                        // 组织维「租户配额」判定在 boundedElastic 线程执行，TenantContextHolder
+                        // 的 ThreadLocal 跨线程丢失；写入请求属性供配额层跨线程安全读取（与
+                        // holder / department 同构）。TENANT_ID_ATTRIBUTE 仅供用量打标等复用。
+                        exchange.getAttributes().put(QUOTA_TENANT_ATTRIBUTE, keyTenantId);
+                        httpRequest.getAttributes().put(QUOTA_TENANT_ATTRIBUTE, keyTenantId);
                         // 同时补绑到当前线程的租户上下文：企业侧过滤器在认证完成前已执行，
                         // 读不到 Key 归属而回落 default；此处补绑后，本条链路上的配额账本、
                         // 调用历史/用量打标、JPA 行级过滤都得到正确租户。
                         org.unreal.modelrouter.enterprise.config.TenantContextHolder.resolve(keyTenantId);
+                    }
+                }
+
+                // 组织维额度（用户 / 部门）：认证后一次性解析归属写入请求属性，配额执行层从属性读，
+                // 零热路径查库。仅在总开关 + 组织维开关打开时执行（其余请求零开销）；整条链已
+                // subscribeOn(boundedElastic)，department 解析的一次 DB 读不占 Netty EventLoop。
+                if (quotaEnforcementService != null
+                        && quotaEnforcementService.isOrgScopeResolutionNeeded()
+                        && auth instanceof ApiKeyAuthentication quotaKeyAuth) {
+                    // holder 来源：已认证 ApiKey 的使用者；getDetails 用模式匹配保护，
+                    // 非 ApiKey 时不强转（认证热路径不得因 ClassCastException 破链）
+                    final String holder = quotaKeyAuth.getDetails() instanceof ApiKey apiKey
+                            && apiKey.getHolder() != null ? apiKey.getHolder().trim() : "";
+                    if (!holder.isEmpty()) {
+                        exchange.getAttributes().put(QUOTA_HOLDER_ATTRIBUTE, holder);
+                        httpRequest.getAttributes().put(QUOTA_HOLDER_ATTRIBUTE, holder);
+                        // 部门维单独门控：仅部门额度开关打开才解析 holder→department（缓存 + 负缓存）
+                        if (quotaEnforcementService.isDepartmentScopeEnabled() && departmentResolver != null) {
+                            final String dept = departmentResolver.resolve(holder);
+                            if (dept != null && !dept.isEmpty()) {
+                                exchange.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
+                                httpRequest.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
+                            }
+                        }
                     }
                 }
 
@@ -566,6 +608,24 @@ public class ServiceRequestHandler {
                 String poolName = registry.resolvePoolName(serviceType, modelName);
                 if (poolName != null) {
                     exchange.getResponse().getHeaders().add("X-Trunkline-Pool", poolName);
+                    // v2.8.9 池名改写凭据：池名判定依赖租户隔离的池快照，此处网关线程租户上下文
+                    // 可靠；下游适配器处理器在 boundedElastic 线程上租户上下文不可达，isPoolName
+                    // 会误判，虚拟模型名将原样透传上游（上游按未知模型回 404 → 降级 503）。
+                    // 改写决策在这里做出，随请求属性下发，处理器按凭据无条件改写 model 字段。
+                    if (!poolName.equals(selectedInstance.getName())) {
+                        final String rewriteTarget = selectedInstance.getName();
+                        // 2026-11-27（中风险整改）：凭据两侧都写（exchange + httpRequest），
+                        // 与上方 QUOTA_TENANT_ATTRIBUTE 的写法对齐——万一请求对象被包装 /
+                        // 重建（装饰器、重试路径），下游仍能从 exchange 属性读到改写凭据
+                        exchange.getAttributes().put(
+                                org.unreal.modelrouter.router.adapter.request.TokenUsageExtractor
+                                        .GATEWAY_MODEL_REWRITE_ATTRIBUTE,
+                                rewriteTarget);
+                        httpRequest.getAttributes().put(
+                                org.unreal.modelrouter.router.adapter.request.TokenUsageExtractor
+                                        .GATEWAY_MODEL_REWRITE_ATTRIBUTE,
+                                rewriteTarget);
+                    }
                 }
                 String strategy = registry.resolveRoutingStrategy(serviceType, modelName);
                 if (strategy != null) {
@@ -1016,7 +1076,7 @@ public class ServiceRequestHandler {
                 reservation.appendDimensionWithLimits(QuotaDimension.ofModel(instanceName), limits);
         if (violation.isPresent()) {
             logger.warn("厂商模型额度超限，返回 429: model={}, {}",
-                    instanceName, violation.get().describe());
+                    instanceName, violation.get().describeDetailed());
         }
         return violation;
     }
@@ -1064,7 +1124,9 @@ public class ServiceRequestHandler {
                 logger.debug("设置配额超限响应头失败: {}", e.getMessage());
             }
         }
-        logger.warn("API Key 配额超限，返回 429: {}", violation.describe());
+        // 2026-11-27（中风险整改）：日志带 scopeType/scopeId 便于定位命中桶；
+        // 响应体只放 describe()（脱敏），内部标识不外泄给客户端
+        logger.warn("API Key 配额超限，返回 429: {}", violation.describeDetailed());
         return Mono.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, violation.describe()));
     }
 

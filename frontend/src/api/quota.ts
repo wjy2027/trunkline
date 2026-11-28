@@ -35,6 +35,10 @@ export interface QuotaConfig {
   backendName: string
   hotEditableFields: string[]
   restartRequiredFields: string[]
+  /** 组织维额度灰度开关（默认 false，后端 v2.5+ 提供；旧后端缺失时按 false 处理） */
+  userScopeEnabled?: boolean
+  departmentScopeEnabled?: boolean
+  tenantScopeEnabled?: boolean
 }
 
 /** 热改请求体（全部可空，null/省略 = 不改） */
@@ -42,6 +46,9 @@ export interface QuotaConfigPayload {
   enabled?: boolean | null
   failOpen?: boolean | null
   windows?: string[] | null
+  userScopeEnabled?: boolean | null
+  departmentScopeEnabled?: boolean | null
+  tenantScopeEnabled?: boolean | null
 }
 
 export interface RedisProbe {

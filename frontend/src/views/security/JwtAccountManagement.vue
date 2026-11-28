@@ -91,7 +91,7 @@
           {{ formatDateTime(scope.row.updatedAt) }}
         </template>
       </el-table-column>
-      <el-table-column :label="t('accounts.actions')" min-width="140" fixed="right">
+      <el-table-column :label="t('accounts.actions')" min-width="180" fixed="right">
         <template #default="scope">
           <el-button-group>
             <el-button
@@ -103,6 +103,16 @@
               @click="editAccount(scope.row)"
             >
               <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button
+              v-if="canWrite"
+              size="small"
+              type="warning"
+              :title="t('orgScopeQuota.quotaButton')"
+              :aria-label="t('orgScopeQuota.quotaButton')"
+              @click="openQuotaDialog(scope.row)"
+            >
+              <el-icon><Odometer /></el-icon>
             </el-button>
             <el-button
               v-if="canWrite"
@@ -119,6 +129,14 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 用户配额编辑弹窗（scopeId = username，即组织维「用户额度」的 holder） -->
+    <OrgScopeQuotaDialog
+      v-model="quotaDialogVisible"
+      scope="users"
+      :scope-id="quotaTarget"
+      scope-id-locked
+    />
 
     <!-- 创建/编辑账户对话框 -->
     <el-dialog
@@ -172,16 +190,17 @@
           />
         </el-form-item>
         <el-form-item :label="t('accounts.department')" prop="department">
-          <el-select
-            v-model="accountForm.department"
-            filterable
-            allow-create
-            default-first-option
-            :placeholder="t('accounts.departmentPlaceholder')"
-            style="width: 100%;"
-          >
-            <el-option v-for="d in departmentOptions" :key="d" :label="d" :value="d" />
-          </el-select>
+          <div class="dept-select-row">
+            <el-select
+              v-model="accountForm.department"
+              filterable
+              :placeholder="t('accounts.departmentPlaceholder')"
+              style="flex: 1;"
+            >
+              <el-option v-for="d in departmentOptions" :key="d" :label="d" :value="d" />
+            </el-select>
+            <el-button :icon="Plus" @click="addDepartment">{{ t('accounts.departmentAdd') }}</el-button>
+          </div>
           <div class="form-hint">{{ t('accounts.departmentHint') }}</div>
         </el-form-item>
         <el-form-item :label="t('accounts.roles')" prop="role">
@@ -276,13 +295,17 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { confirmDanger } from '@/utils/dangerConfirm'
+import { getApiKeys, deleteApiKey } from '@/api/apiKey'
+import { getOrgScopeQuotas, deleteOrgScopeQuota } from '@/api/orgScopeQuota'
+import request from '@/utils/request'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { usePermission } from '@/composables/usePermission'
 import { useTableMaxHeight } from '@/composables/useTableMaxHeight'
-import { Plus, Refresh, Search, Edit, Delete, DocumentAdd } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, Edit, Delete, DocumentAdd, Odometer } from '@element-plus/icons-vue'
+import OrgScopeQuotaDialog from '@/views/config/OrgScopeQuotaDialog.vue'
 import BatchImportAccountsDialog from './BatchImportAccountsDialog.vue'
 import { effectMessage } from '@/utils/effectScope'
 import PageSkeleton from '@/components/PageSkeleton.vue'
@@ -327,6 +350,14 @@ const ROLE_DESCRIPTIONS: Record<RoleName, string> = {
 const { t } = useI18n()
 const { hasPermission } = usePermission()
 const canWrite = hasPermission('system:accounts:manage')
+
+// ── 用户配额编辑弹窗（2026-11-28）：scopeId=账号名（=ApiKey.holder，组织维用户额度键）
+const quotaDialogVisible = ref(false)
+const quotaTarget = ref('')
+const openQuotaDialog = (account: { username: string }) => {
+  quotaTarget.value = account.username
+  quotaDialogVisible.value = true
+}
 
 /** 角色标签颜色：ADMIN 红 / OPERATOR 橙 / USER 蓝 / VIEWER 灰 */
 const roleTagType = (role: string) =>
@@ -422,14 +453,50 @@ const pickRoleBindings = (roles?: RoleValue[]): RoleBinding[] => {
     .map(b => ({ t: b.t, r: b.r }))
 }
 
-/** 已有部门清单（下拉可复用，也可直接输入新部门名） */
+/** 部门下拉候选（2026-11-28 改源：稳定部门注册表，此前是账号 department 文本去重）。
+ *  只允许从登记表选择（不允许自由文本落库），新部门经「新增部门」按钮先登记再选用——
+ *  登记动作生成稳定 deptId，团队用量/成本归因的部门维度依赖它。 */
 const departmentOptions = ref<string[]>([])
 
 const loadDepartments = async () => {
   try {
-    departmentOptions.value = await getJwtAccountDepartments()
+    const res = await request.get('/security/group-roles/departments')
+    const data = (res.data as { data?: unknown }).data
+    const rows: Array<{ name?: string }> = Array.isArray(data)
+      ? data
+      : ((data as { items?: Array<{ name?: string }> })?.items ?? [])
+    departmentOptions.value = rows
+      .map(r => String(r.name ?? ''))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
   } catch {
-    departmentOptions.value = []
+    // 注册表接口不可用（极老版本）→ 退回账号文本去重口径，保证下拉不空
+    try {
+      departmentOptions.value = await getJwtAccountDepartments()
+    } catch {
+      departmentOptions.value = []
+    }
+  }
+}
+
+/** 手动新增登记部门（OSS 无组织页，账号编辑旁就是 OSS 的部门管理入口）：
+ *  先登记生成 deptId，再刷新候选并选中，杜绝未登记的自由文本。 */
+const addDepartment = async () => {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t('accounts.departmentAddHint'),
+      t('accounts.departmentAdd'),
+      { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'),
+        inputPlaceholder: t('accounts.departmentNamePlaceholder'),
+        inputValidator: (v: string) => (v && v.trim() ? true : t('accounts.departmentNameRequired')) }
+    )
+    const name = value.trim()
+    await request.post('/security/group-roles/departments', { name })
+    ElMessage.success(t('accounts.departmentAddOk', { name }))
+    await loadDepartments()
+    accountForm.department = name
+  } catch {
+    /* 取消或登记失败：失败时 request 拦截器已 toast */
   }
 }
 
@@ -598,7 +665,8 @@ const handleStatusChange = async (account: JwtAccount) => {
   }
 }
 
-// 删除账户
+// 删除账户（2026-11-28：删除前校验关联数据——绑定密钥 + 组织维用户额度配置，
+// 有关联时明确提示影响面，用户确认后一并级联删除）
 const deleteAccount = async (account: JwtAccount) => {
   // 禁止删除 admin 账户
   if (account.username === 'admin') {
@@ -606,12 +674,75 @@ const deleteAccount = async (account: JwtAccount) => {
     return
   }
 
-  const confirmed = await confirmDanger({
-    title: t('accounts.messages.deleteConfirmTitle'),
-    target: account.username,
-    type: 'warning'
-  })
-  if (!confirmed) return
+  // 1) 关联数据探测：该账号名下（holder=账号名）的密钥 + 用户额度配置
+  let boundKeyIds: string[] = []
+  let hasUserQuota = false
+  try {
+    const listVo = await getApiKeys()
+    // ApiKeyListVO 的列表字段是 items；兼容旧 keys 字段与裸数组形态
+    const keys = (listVo as { items?: Array<{ keyId?: string; holder?: string }> }).items
+      ?? (listVo as { keys?: Array<{ keyId?: string; holder?: string }> }).keys
+      ?? (Array.isArray(listVo) ? listVo : [])
+    boundKeyIds = keys
+      .filter(k => k.holder === account.username && k.keyId)
+      .map(k => String(k.keyId))
+  } catch {
+    // 密钥列表拉不到（如权限形态差异）时不阻断删除主流程，仅不级联密钥
+    boundKeyIds = []
+  }
+  try {
+    const userQuotas = await getOrgScopeQuotas('users')
+    hasUserQuota = userQuotas.some(r => String(r.scopeId) === account.username)
+  } catch {
+    hasUserQuota = false
+  }
+  const hasRelated = boundKeyIds.length > 0 || hasUserQuota
+
+  // 2) 确认弹窗：有关联数据时列明影响面，确认即级联删除
+  if (hasRelated) {
+    const parts: string[] = []
+    if (boundKeyIds.length > 0) parts.push(t('accounts.messages.relatedKeys', { count: boundKeyIds.length }))
+    if (hasUserQuota) parts.push(t('accounts.messages.relatedQuota'))
+    const confirmed = await confirmDanger({
+      title: t('accounts.messages.deleteConfirmTitle'),
+      target: account.username,
+      impact: t('accounts.messages.relatedImpact', { detail: parts.join('、') }),
+      remedy: t('accounts.messages.cascadeRemedy'),
+      confirmText: t('accounts.messages.cascadeConfirm'),
+      type: 'error'
+    })
+    if (!confirmed) return
+
+    // 3) 级联清理：先删关联数据（逐项容错，单项失败不阻断其余与账号删除）
+    let cascadeFailed = false
+    for (const keyId of boundKeyIds) {
+      try {
+        await deleteApiKey(keyId)
+      } catch (error) {
+        cascadeFailed = true
+        console.error('级联删除密钥失败:', keyId, error)
+      }
+    }
+    if (hasUserQuota) {
+      try {
+        await deleteOrgScopeQuota('users', account.username)
+      } catch (error) {
+        cascadeFailed = true
+        console.error('级联删除用户额度失败:', error)
+      }
+    }
+    if (cascadeFailed) {
+      ElMessage.warning(t('accounts.messages.cascadePartialFailed'))
+    }
+  } else {
+    const confirmed = await confirmDanger({
+      title: t('accounts.messages.deleteConfirmTitle'),
+      target: account.username,
+      type: 'warning'
+    })
+    if (!confirmed) return
+  }
+
   try {
     await deleteJwtAccount(account.username)
     ElMessage.success(t('accounts.messages.deleteSuccess'))
@@ -675,6 +806,13 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.4;
   color: var(--ja-text-secondary, var(--el-text-color-secondary));
+}
+
+/* 部门下拉 + 新增部门按钮（2026-11-28：只能选登记部门，新部门先登记再选用） */
+.dept-select-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 
 /* 表格内弱化文本（如未分配部门） */

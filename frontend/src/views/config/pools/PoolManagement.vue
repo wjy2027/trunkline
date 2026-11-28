@@ -267,38 +267,38 @@
     :body-style="dialogBodyStyle"
     destroy-on-close
   >
-    <div class="quota-block">
-      <div class="form-tip">{{ t('pool.quotaSectionHint') }}</div>
-      <div class="quota-grid">
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaRatePerMinute') }}</span>
-          <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" size="small" />
-        </div>
-        <!-- 每小时 / 每月限额仅账本开启时真实生效；账本关闭时禁用（与「全部密钥」页口径一致） -->
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaHourlyRequest') }}</span>
-          <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" size="small" :disabled="!multiWindowEnforced" />
-        </div>
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaHourlyToken') }}</span>
-          <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
-        </div>
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaDailyRequest') }}</span>
-          <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" size="small" />
-        </div>
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaDailyToken') }}</span>
-          <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" size="small" />
-        </div>
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaMonthlyRequest') }}</span>
-          <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
-        </div>
-        <div class="quota-field">
-          <span class="quota-label">{{ t('pool.quotaMonthlyToken') }}</span>
-          <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" size="small" :disabled="!multiWindowEnforced" />
-        </div>
+      <div class="quota-block">
+        <div class="form-tip">{{ t('pool.quotaSectionHint') }}</div>
+        <div class="quota-grid">
+          <!-- 2026-11-28：字段随全局统计窗口联动（窗口关闭则不显示） -->
+          <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaRatePerMinute') }}</span>
+            <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" size="small" />
+          </div>
+          <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaHourlyRequest') }}</span>
+            <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" size="small" :disabled="!multiWindowEnforced" />
+          </div>
+          <div v-if="isQuotaFieldVisible('hourTokens')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaHourlyToken') }}</span>
+            <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
+          </div>
+          <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaDailyRequest') }}</span>
+            <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" size="small" />
+          </div>
+          <div v-if="isQuotaFieldVisible('dayTokens')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaDailyToken') }}</span>
+            <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" size="small" />
+          </div>
+          <div v-if="isQuotaFieldVisible('monthRequests')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaMonthlyRequest') }}</span>
+            <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" size="small" :disabled="!multiWindowEnforced" />
+          </div>
+          <div v-if="isQuotaFieldVisible('monthTokens')" class="quota-field">
+            <span class="quota-label">{{ t('pool.quotaMonthlyToken') }}</span>
+            <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" size="small" :disabled="!multiWindowEnforced" />
+          </div>
         <div v-if="!multiWindowEnforced" class="quota-field quota-field--wide">
           <span class="quota-hint quota-hint--warn">{{ t('apiKeys.quotaForm.inertFieldHint') }}</span>
         </div>
@@ -350,6 +350,7 @@ import PageSkeleton from '@/components/PageSkeleton.vue'
 import TermHelp from '@/components/common/TermHelp.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useQuotaLedger } from '@/composables/useQuotaLedger'
+import { useQuotaWindows } from '@/composables/useQuotaWindows'
 import { useTableMaxHeight } from '@/composables/useTableMaxHeight'
 import { useEnterpriseStore } from '@/stores/enterprise'
 import { useTenantStore } from '@/stores/tenant'
@@ -362,6 +363,8 @@ const enterpriseStore = useEnterpriseStore()
 const tenantStore = useTenantStore()
 // 配额账本开关（单例探针）：关闭时额度配置弹窗里的每小时 / 每月字段禁用
 const { multiWindowEnforced, loadQuotaLedgerState } = useQuotaLedger()
+// 统计窗口联动（2026-11-28）：全局 windows 关闭的窗口，分组配额字段不显示
+const { isFieldVisible: isQuotaFieldVisible } = useQuotaWindows()
 const { hasPermission } = usePermission()
 const canWrite = hasPermission('config:pools:write')
 

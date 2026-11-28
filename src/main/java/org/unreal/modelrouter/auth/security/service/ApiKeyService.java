@@ -97,9 +97,25 @@ public class ApiKeyService {
         return Mono.defer(() -> {
             var r = apiKeyValidator.validateFully(kv, apiKeyCache, ip);
             if (r.isSuccess()) {
-                updateUsageStatistics(r.getApiKey().getKeyId(), true);
-                eventPublisher.publishEvent(ApiKeyAuditEvent.used(r.getApiKey().getKeyId(), ep, ip, true));
-                return Mono.just(r.getApiKey());
+                // 派生索引（lookupIndex）可能持有陈旧对象：定时 refreshCacheFromSharedStore 会
+                // apiKeyCache.putAll 整批替换对象，而 lookupIndex 的 rebuild 与之存在竞争窗口；
+                // 认证热路径改以主存储 apiKeyCache 的权威对象为准，避免拿到的 ApiKey 缺字段
+                // （如 tenantId=null → 组织维租户配额被 sentinel 静默跳过）。
+                // 注意：validateFully 返回的是 createSecureCopy()，其 keyHash 被置 null，
+                // 不能用它反查缓存；改用 keyId → keyIdIndex → keyHash 拿到权威对象。
+                ApiKey resolved = r.getApiKey();
+                if (resolved != null && resolved.getKeyId() != null) {
+                    String authoritativeHash = keyIdIndex.get(resolved.getKeyId());
+                    if (authoritativeHash != null) {
+                        ApiKey authoritative = apiKeyCache.get(authoritativeHash);
+                        if (authoritative != null) {
+                            resolved = authoritative;
+                        }
+                    }
+                }
+                updateUsageStatistics(resolved.getKeyId(), true);
+                eventPublisher.publishEvent(ApiKeyAuditEvent.used(resolved.getKeyId(), ep, ip, true));
+                return Mono.just(resolved);
             }
             if (r.getKeyId() != null) {
                 updateUsageStatistics(r.getKeyId(), false);

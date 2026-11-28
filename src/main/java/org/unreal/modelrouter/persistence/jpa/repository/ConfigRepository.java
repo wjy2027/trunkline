@@ -30,6 +30,19 @@ public interface ConfigRepository extends JpaRepository<ConfigEntity, Long> {
     Optional<ConfigEntity> findByConfigKeyAndVersion(String configKey, Integer version);
 
     /**
+     * 容错查找（2026-11-28）：同 (configKey, version) 出现重复行（历史脏数据/并发写入/
+     * 唯一约束缺失场景）时取 id 最大的一行，而不是抛 IncorrectResultSizeDataAccessException
+     * 把整条启动初始化链路炸掉（实测后果：security.api-keys 合并失败 → 回退 YAML 初始化
+     * 也失败 → 重启后 API Key 库清空，全部密钥 401）。
+     */
+    Optional<ConfigEntity> findFirstByConfigKeyAndVersionOrderByIdDesc(String configKey, Integer version);
+
+    /**
+     * 同 (configKey, version) 的全部行（供写入侧自愈去重用）。
+     */
+    List<ConfigEntity> findAllByConfigKeyAndVersion(String configKey, Integer version);
+
+    /**
      * #811/#715：悲观行锁读取当前配置行（仅限事务内调用）。
      *
      * <p>供 {@link org.unreal.modelrouter.persistence.store.StoreManager#mutateConfig}

@@ -73,15 +73,26 @@
       "deleteConfirmMessage": "Delete account \"{username}\"? This action cannot be undone!",
       "confirmDelete": "Delete",
       "deleteSuccess": "Account deleted successfully",
-      "deleteFailed": "Failed to delete account"
+      "deleteFailed": "Failed to delete account",
+      "relatedKeys": "{count} bound API key(s)",
+      "relatedQuota": "1 user quota config",
+      "relatedImpact": "Related data found: {detail}. Deleting the account will also remove them, which cannot be undone.",
+      "cascadeRemedy": "Deleted keys and quota configs cannot be recovered. Transfer holder first if needed.",
+      "cascadeConfirm": "Delete & clean up",
+      "cascadePartialFailed": "Some related data failed to clean up. Check the API Keys page and org-scope quota panel."
     },
     "department": "Department",
-    "departmentPlaceholder": "Select or type a department (e.g. R&D)",
-    "departmentHint": "Departments drive the by-department view in Team Usage; usage of the same department is aggregated together.",
+    "departmentPlaceholder": "Select a registered department",
+    "departmentHint": "Select from registered departments only; click \"Add department\" to register a new one first (it generates a stable department ID used by Team Usage statistics).",
     "departmentUnassigned": "Unassigned",
     "name": "Name",
     "namePlaceholder": "Enter the user's real name",
     "nameHint": "Display name shown for the account owner to aid identification; leave blank to show \"Unassigned\".",
-    "nameUnassigned": "Unassigned"
+    "nameUnassigned": "Unassigned",
+    "departmentAdd": "Add department",
+    "departmentAddHint": "Enter a new department name to confirm: it will be registered (with a stable department ID) and then selected for this account.",
+    "departmentNamePlaceholder": "Department name (e.g. R&D)",
+    "departmentNameRequired": "Department name is required",
+    "departmentAddOk": "Department \"{name}\" registered"
   }
 }

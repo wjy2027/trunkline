@@ -286,3 +286,4 @@ frontend/diag-pages/
 !.github/workflows/
 .github/workflows/*
 !.github/workflows/*.yml
+__pycache__/

@@ -319,27 +319,27 @@
       <el-collapse class="quota-advanced">
         <el-collapse-item :title="t('apiKeys.quotaForm.advancedLimits')" name="quota-advanced">
           <div class="quota-grid">
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.dailyRequestLimit') }}</div>
               <el-input-number v-model="quotaDrawer.form.dailyRequestLimit" :min="0" :step="100" style="width: 100%" />
             </div>
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.hourlyRequestLimit') }}</div>
               <el-input-number v-model="quotaDrawer.form.hourlyRequestLimit" :min="0" :step="50" :disabled="!multiWindowEnforced" style="width: 100%" />
             </div>
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('dayRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.dailyTokenLimit') }}</div>
               <el-input-number v-model="quotaDrawer.form.dailyTokenLimit" :min="0" :step="1000" style="width: 100%" />
             </div>
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('hourRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.hourlyTokenLimit') }}</div>
               <el-input-number v-model="quotaDrawer.form.hourlyTokenLimit" :min="0" :step="500" :disabled="!multiWindowEnforced" style="width: 100%" />
             </div>
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.rateLimitPerMinute') }}</div>
               <el-input-number v-model="quotaDrawer.form.rateLimitPerMinute" :min="0" :step="10" style="width: 100%" />
             </div>
-            <div class="quota-grid__item">
+            <div v-if="isQuotaFieldVisible('monthRequests')" class="quota-grid__item">
               <div class="quota-field__label">{{ t('apiKeys.quotaForm.monthlyRequestLimit') }}</div>
               <el-input-number v-model="quotaDrawer.form.monthlyRequestLimit" :min="0" :step="1000" :disabled="!multiWindowEnforced" style="width: 100%" />
             </div>
@@ -721,6 +721,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { usePermission } from '@/composables/usePermission'
 import { useQuotaLedger } from '@/composables/useQuotaLedger'
+import { useQuotaWindows } from '@/composables/useQuotaWindows'
 import { useEnterpriseStore } from '@/stores/enterprise'
 import { useTenantStore } from '@/stores/tenant'
 import { usePersistedState } from '@/composables/usePersistedState'
@@ -818,6 +819,10 @@ function openDetailDrawer(row: any) {
  * 这里用它把那些字段禁掉并明示，避免管理员「配了以为会拦」。</p>
  */
 const { multiWindowEnforced, loadQuotaLedgerState } = useQuotaLedger()
+
+// 统计窗口联动（2026-11-28）：全局 windows 关闭的窗口，高级限额字段不显示
+// （后端 enabledWindows 不判定该窗口，配置无意义）
+const { isFieldVisible: isQuotaFieldVisible } = useQuotaWindows()
 
 const quotaDrawerVisible = ref(false)
 const quotaDrawerLoading = ref(false)

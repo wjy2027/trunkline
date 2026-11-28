@@ -58,12 +58,8 @@
       style="margin-bottom: 16px"
     />
 
-    <!-- 热编辑配置 -->
+    <!-- 热编辑配置（2026-11-28 按产品要求移除卡片标题栏） -->
     <el-card v-if="config" shadow="hover" style="margin-bottom: 16px">
-      <template #header>
-        <span class="card-title">{{ t('quotaConfig.runtimeConfigTitle') }}</span>
-      </template>
-
       <div class="runtime-config-grid">
         <div class="config-switch-item">
           <span class="config-switch-label">{{ t('quotaConfig.enableQuotaLabel') }}</span>
@@ -83,11 +79,23 @@
           >
             <el-option
               v-for="w in windowOptions"
-              :key="w"
-              :label="w"
-              :value="w"
+              :key="w.value"
+              :label="t(w.labelKey)"
+              :value="w.value"
             />
           </el-select>
+        </div>
+        <div class="config-switch-item">
+          <span class="config-switch-label">{{ t('quotaConfig.userScopeLabel') }}</span>
+          <el-switch v-model="runtimeForm.userScopeEnabled" />
+        </div>
+        <div class="config-switch-item">
+          <span class="config-switch-label">{{ t('quotaConfig.departmentScopeLabel') }}</span>
+          <el-switch v-model="runtimeForm.departmentScopeEnabled" />
+        </div>
+        <div class="config-switch-item">
+          <span class="config-switch-label">{{ t('quotaConfig.tenantScopeLabel') }}</span>
+          <el-switch v-model="runtimeForm.tenantScopeEnabled" />
         </div>
       </div>
 
@@ -107,6 +115,9 @@
         </el-button>
       </div>
     </el-card>
+
+    <!-- 组织维额度配置（用户 / 部门 / 租户） -->
+    <OrgScopeQuotaPanel v-if="config?.enabled" />
 
     <!-- 需重启生效（只读区） -->
     <el-card v-if="config" shadow="hover">
@@ -220,6 +231,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh, CircleCheck as _CircleCheck, CircleClose as _CircleClose, Coin as _Coin, Warning as _Warning, Timer as _Timer, Check } from '@element-plus/icons-vue'
 import PageSkeleton from '@/components/PageSkeleton.vue'
 import StatCard from '@/components/StatCard.vue'
+import OrgScopeQuotaPanel from '@/views/config/OrgScopeQuotaPanel.vue'
 import { effectMessage } from '@/utils/effectScope'
 import {
   getQuotaConfig,
@@ -236,7 +248,13 @@ const loading = ref(false)
 const saving = ref(false)
 const config = ref<QuotaConfig | null>(null)
 
-const windowOptions = ['MINUTE', 'HOUR', 'DAY', 'MONTH']
+// 统计窗口选项：value 为后端窗口名，labelKey 多语言显示（2026-11-28）
+const windowOptions = [
+  { value: 'MINUTE', labelKey: 'quotaConfig.window.minute' },
+  { value: 'HOUR', labelKey: 'quotaConfig.window.hour' },
+  { value: 'DAY', labelKey: 'quotaConfig.window.day' },
+  { value: 'MONTH', labelKey: 'quotaConfig.window.month' },
+]
 
 // ── 运行时表单 ──
 
@@ -244,18 +262,27 @@ interface RuntimeForm {
   enabled: boolean
   failOpen: boolean
   windows: string[]
+  userScopeEnabled: boolean
+  departmentScopeEnabled: boolean
+  tenantScopeEnabled: boolean
 }
 
 const runtimeForm = ref<RuntimeForm>({
   enabled: false,
   failOpen: false,
   windows: [],
+  userScopeEnabled: false,
+  departmentScopeEnabled: false,
+  tenantScopeEnabled: false,
 })
 
 const syncFormFromConfig = (c: QuotaConfig) => {
   runtimeForm.value.enabled = c.enabled
   runtimeForm.value.failOpen = c.failOpen
   runtimeForm.value.windows = [...c.windows]
+  runtimeForm.value.userScopeEnabled = c.userScopeEnabled ?? false
+  runtimeForm.value.departmentScopeEnabled = c.departmentScopeEnabled ?? false
+  runtimeForm.value.tenantScopeEnabled = c.tenantScopeEnabled ?? false
 }
 
 const resetRuntimeForm = () => {
@@ -286,6 +313,9 @@ const configChanged = computed(() => {
   ) {
     return true
   }
+  if (runtimeForm.value.userScopeEnabled !== (c.userScopeEnabled ?? false)) return true
+  if (runtimeForm.value.departmentScopeEnabled !== (c.departmentScopeEnabled ?? false)) return true
+  if (runtimeForm.value.tenantScopeEnabled !== (c.tenantScopeEnabled ?? false)) return true
   return false
 })
 
@@ -322,6 +352,15 @@ const handleSaveConfig = async () => {
     runtimeForm.value.windows.some(w => !c.windows.includes(w))
   ) {
     payload.windows = [...runtimeForm.value.windows]
+  }
+  if (runtimeForm.value.userScopeEnabled !== (c.userScopeEnabled ?? false)) {
+    payload.userScopeEnabled = runtimeForm.value.userScopeEnabled
+  }
+  if (runtimeForm.value.departmentScopeEnabled !== (c.departmentScopeEnabled ?? false)) {
+    payload.departmentScopeEnabled = runtimeForm.value.departmentScopeEnabled
+  }
+  if (runtimeForm.value.tenantScopeEnabled !== (c.tenantScopeEnabled ?? false)) {
+    payload.tenantScopeEnabled = runtimeForm.value.tenantScopeEnabled
   }
 
   if (Object.keys(payload).length === 0) {

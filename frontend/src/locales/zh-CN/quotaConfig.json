@@ -18,6 +18,9 @@
     "failOpenSwitchLabel": "降级放行",
     "windowsLabel": "统计窗口",
     "windowsPlaceholder": "请选择统计窗口",
+    "userScopeLabel": "用户额度（按使用者）",
+    "departmentScopeLabel": "部门额度（按行政部门）",
+    "tenantScopeLabel": "租户额度（按业务归属）",
     "flushIntervalSecondsLabel": "刷新间隔（秒）",
     "saveRuntimeConfig": "保存配置",
     "reset": "重置",
@@ -37,6 +40,12 @@
     "retentionDayLabel": "天窗口保留",
     "retentionMonthLabel": "月窗口保留",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "window": {
+      "minute": "每分钟",
+      "hour": "每小时",
+      "day": "每天",
+      "month": "每月"
+    }
   }
 }

@@ -684,6 +684,11 @@ public class ApiKey {
                 .createdBy(this.createdBy)
                 .holder(this.holder)
                 .creatorIpAddress(this.creatorIpAddress)
+                // 归属租户是调用归属元数据（非敏感字段），必须随安全副本传递。
+                // 认证成功后 CustomReactiveAuthenticationManager 从本副本读 tenantId 注入
+                // ApiKeyAuthentication；缺失会让无 X-Tenant-Id 头的智能体调用回落 default，
+                // 组织维「租户配额」随即被 sentinel 跳过（表现为租户限额不生效）。
+                .tenantId(this.tenantId)
                 .rotationPeriodDays(this.rotationPeriodDays)
                 .lastRotatedAt(this.lastRotatedAt)
                 .enabled(this.enabled)

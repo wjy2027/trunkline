@@ -19,6 +19,7 @@ import org.unreal.modelrouter.auth.security.service.ApiKeyService;
 import org.unreal.modelrouter.auth.sanitization.SanitizationService;
 import org.unreal.modelrouter.config.core.StreamingSafetyProperties;
 import org.unreal.modelrouter.enterprise.config.TenantContextHolder;
+import org.unreal.modelrouter.router.adapter.request.TokenUsageExtractor;
 import org.unreal.modelrouter.enterprise.spi.ModerationProvider;
 import org.unreal.modelrouter.monitor.callhistory.ApiCallHistoryRecorder;
 import org.unreal.modelrouter.monitor.callhistory.config.CallHistoryProperties;
@@ -149,6 +150,24 @@ public class StreamingRequestProcessor {
      */
     @SuppressWarnings("unchecked")
     private Object rewriteModelField(final Object target, final String instanceName) {
+        return rewriteModelField(target, instanceName, null);
+    }
+
+    /**
+     * v2.8.9 池名改写（网关凭据变体）：{@code isPoolName} 依赖租户隔离的池快照，本方法在
+     * boundedElastic 线程上租户上下文不可达时会误判，虚拟模型名透传上游（上游按未知模型回 404）。
+     * 网关已在租户上下文可靠的线程上做出判定并经请求属性下发
+     * （{@code TokenUsageExtractor.GATEWAY_MODEL_REWRITE_ATTRIBUTE}），凭据存在时直接改写。
+     */
+    private Object rewriteModelField(final Object target, final String instanceName,
+            final String gatewayRewriteTarget) {
+        if (target != null && gatewayRewriteTarget != null && !gatewayRewriteTarget.isBlank()) {
+            final String originalModel = extractModel(target);
+            if (originalModel != null && !originalModel.equals(instanceName)) {
+                return replaceModel(target, gatewayRewriteTarget);
+            }
+            return target;
+        }
         if (target == null || instanceName == null || poolSelector == null) {
             return target;
         }
@@ -159,6 +178,19 @@ public class StreamingRequestProcessor {
             return target;
         }
         return replaceModel(target, instanceName);
+    }
+
+    /**
+     * 读取网关下发的池名改写凭据（见 {@code TokenUsageExtractor#GATEWAY_MODEL_REWRITE_ATTRIBUTE}）。
+     * 请求属性随 ServerHttpRequest 走，与执行线程无关，规避 boundedElastic 上租户上下文缺失。
+     */
+    private String gatewayRewriteTarget(final ServerHttpRequest httpRequest) {
+        if (httpRequest == null) {
+            return null;
+        }
+        final Object target = httpRequest.getAttributes()
+                .get(TokenUsageExtractor.GATEWAY_MODEL_REWRITE_ATTRIBUTE);
+        return target instanceof String ? (String) target : null;
     }
 
     /**
@@ -530,7 +562,7 @@ public class StreamingRequestProcessor {
             // 现改为 retrieve() + 状态保真的 onStatus：错误仍在订阅响应体之前发生，
             // 而正常流的 body 与 legacy 面走同一条已验证有帧的 bodyToFlux 路径。
             final Flux<ServerSentEvent<String>> v1Stream = decorateChunks.apply(requestSpec
-                    .bodyValue(rewriteModelField(request, instanceName))
+                    .bodyValue(rewriteModelField(request, instanceName, gatewayRewriteTarget(httpRequest)))
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, clientResponse -> {
                         logger.warn("流式请求下游错误: instance={}, target={}, status={}",
@@ -548,7 +580,7 @@ public class StreamingRequestProcessor {
 
         // legacy /api/** 面（与 Anthropic 面之外的其余路径）：保持既有语义 —— 200 + 流，异常在流内终止
         final Flux<ServerSentEvent<String>> legacyStream = decorateChunks.apply(requestSpec
-                .bodyValue(rewriteModelField(request, instanceName))
+                .bodyValue(rewriteModelField(request, instanceName, gatewayRewriteTarget(httpRequest)))
                 .retrieve()
                 .onStatus(HttpStatusCode::is5xxServerError, clientResponse -> {
                     logger.error("流式请求5xx错误: instance={}, target={}, status={}",

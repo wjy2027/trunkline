@@ -1,0 +1,43 @@
+{
+  "orgScopeQuota": {
+    "title": "Organization Quotas",
+    "hint": "Token quotas aggregated by user / department / tenant; 0 means unlimited; enable the matching switch above first",
+    "scopes": {
+      "users": "Per-user",
+      "departments": "Per-department",
+      "tenants": "Per-tenant"
+    },
+    "hints": {
+      "users": "scopeId is the holder name (API key holder); usage aggregates across all that user's keys",
+      "departments": "scopeId is the department name; usage aggregates by the account's department",
+      "tenants": "scopeId is the tenant ID (product line / project group); only applies to non-default tenants bound to keys"
+    },
+    "scopeId": "Scope ID",
+    "scopeIdPlaceholder": "User / department / tenant ID",
+    "scopeIdRequired": "Scope ID is required",
+    "minuteRequests": "Requests/min",
+    "hourRequests": "Requests/hr",
+    "hourTokens": "Tokens/hr",
+    "dayRequests": "Requests/day",
+    "dayTokens": "Tokens/day",
+    "monthRequests": "Requests/mo",
+    "monthTokens": "Tokens/mo",
+    "actions": "Actions",
+    "add": "Add quota",
+    "edit": "Edit",
+    "delete": "Delete",
+    "empty": "No quota configured (this scope is unlimited)",
+    "zeroMeansUnlimited": "0 means unlimited for that window; all zeros = record usage without enforcement",
+    "saved": "Quota saved",
+    "saveFailed": "Save failed, please try again later",
+    "deleted": "Quota deleted",
+    "deleteFailed": "Delete failed, please try again later",
+    "deleteConfirm": "Delete the quota for \"{id}\"? This scope will no longer be enforced.",
+    "quotaFor": "Quota for {id}",
+    "quotaButton": "Quota",
+    "monthlyAmount": "Monthly amount limit (¥/month)",
+    "monthlyAmountPlaceholder": "Unlimited",
+    "monthlyAmountHint": "Limits the actual spend of the current month (enterprise amount ledger, effective for the current month); leave empty for unlimited.",
+    "monthlyAmountUnavailable": "Monthly amount limits require the enterprise edition (billing license) and are unavailable in this deployment; the window quotas above are unaffected."
+  }
+}

@@ -388,6 +388,16 @@ public class TokenUsageExtractor {
     }
 
     /**
+     * 网关池名改写凭据的请求属性键。
+     *
+     * <p>池名判定（{@code PoolSelector#isPoolName}）依赖租户隔离的池快照；适配器处理器运行在
+     * boundedElastic 线程上，租户 ThreadLocal 在该链路不可达，会把池名误判成普通模型名，
+     * 虚拟模型名原样透传上游（上游按未知模型回 404）。网关侧在租户上下文可靠的线程上完成
+     * 「是否为池名 → 改写目标实例名」判定，经此请求属性下发给处理器。</p>
+     */
+    public static final String GATEWAY_MODEL_REWRITE_ATTRIBUTE = "TRUNKLINE_GATEWAY_MODEL_REWRITE";
+
+    /**
      * v2.8.9: 池路由后,将目标中的 model 字段改写为实际实例名。
      * 兼容 Map 与强类型 DTO/record 两种载体;record 不可变,故 DTO 经 Jackson 转为可变 Map 后替换,
      * 此时必须返回新对象并由调用方接收。仅当原始请求 model 是池名时触发,不影响普通请求。
@@ -401,20 +411,41 @@ public class TokenUsageExtractor {
                 || requestedModel.equals(instanceName)) {
             return target;
         }
+        return applyModelField(target, instanceName);
+    }
+
+    /**
+     * 池名改写的网关凭据变体：优先采用网关在下发的改写凭据（见
+     * {@link #GATEWAY_MODEL_REWRITE_ATTRIBUTE}），无凭据时回退到本线程的池名判定。
+     *
+     * @param gatewayRewriteTarget 网关下发的改写目标（实例名）；null/空表示无凭据
+     */
+    Object rewriteModelField(final Object target, final String requestedModel, final String instanceName,
+            final String gatewayRewriteTarget) {
+        if (target != null && gatewayRewriteTarget != null && !gatewayRewriteTarget.isBlank()
+                && requestedModel != null && !requestedModel.equals(instanceName)) {
+            return applyModelField(target, gatewayRewriteTarget);
+        }
+        return rewriteModelField(target, requestedModel, instanceName);
+    }
+
+    /** 把载体中的 model 字段替换为指定值（兼容 ObjectNode/Map/DTO record 三种载体）。 */
+    @SuppressWarnings("unchecked")
+    private Object applyModelField(final Object target, final String modelName) {
         if (target instanceof ObjectNode) {
             // Jackson ObjectNode 可变(如 GpuStackRequestTransformer 产出的请求),原地 put
-            ((ObjectNode) target).put("model", instanceName);
+            ((ObjectNode) target).put("model", modelName);
             return target;
         }
         if (target instanceof Map) {
             final Map<String, Object> copy = new LinkedHashMap<>((Map<String, Object>) target);
-            copy.put("model", instanceName);
+            copy.put("model", modelName);
             return copy;
         }
         // DTO / record:不可变,序列化到可变 Map 后替换 model,返回新对象
         try {
             final Map<String, Object> map = objectMapper.convertValue(target, LinkedHashMap.class);
-            map.put("model", instanceName);
+            map.put("model", modelName);
             return map;
         } catch (final Exception e) {
             logger.debug("池名 model 改写失败,保持原请求向下游转发: {}", e.getMessage());

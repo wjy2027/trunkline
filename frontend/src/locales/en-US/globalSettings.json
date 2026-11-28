@@ -5,7 +5,8 @@
       "record": "How much to log",
       "lb": "How to split traffic",
       "circuit": "When a model keeps failing",
-      "quota": "How usage is counted"
+      "quota": "How usage is counted",
+      "misc": "Other"
     },
     "hints": {
       "record": {
@@ -23,7 +24,35 @@
       "quota": {
         "affects": "Affects: where usage is recorded, and whether requests are let through or rejected when the ledger errors out.",
         "when": "When to change: to make hourly or monthly limits actually enforce, the ledger must be on. Leaving it off is fine if you only need the daily limit."
+      },
+      "misc": {
+        "affects": "Affects: miscellaneous switches that have no dedicated tab yet — advanced pricing (enterprise) and PII sanitization.",
+        "when": "When to change: when you need tiered pricing, time-of-day pricing, separate cache-hit pricing, or want to adjust PII masking of call records."
       }
+    },
+    "pricingAdvanced": {
+      "title": "Advanced pricing",
+      "description": "When enabled, an \"Advanced pricing rules\" entry appears next to each unit price, allowing tiered, time-of-day and cache-hit differentiated pricing; when disabled, all billing uses the flat unit price.",
+      "needBilling": "Requires the enterprise billing license, which is not unlocked in this deployment; the switch is hidden.",
+      "lockedHint": "Enterprise feature: not included in this deployment (grayscale locked); the switch stays locked.",
+      "hotHint": "Changes take effect immediately (no restart needed); after a restart the value falls back to the static config. To keep it enabled, write it into the config file.",
+      "switchLabel": "Enable advanced pricing (tiered / time-of-day / cache)",
+      "saveFailed": "Failed to switch",
+      "savedOn": "Advanced pricing enabled",
+      "savedOff": "Advanced pricing disabled",
+      "loadFailed": "Failed to load advanced pricing state"
+    },
+    "sanitization": {
+      "title": "PII Sanitization",
+      "requestLabel": "Request record sanitization",
+      "requestDesc": "Mask PII (phone numbers, ID numbers, emails, etc.) in chat requests before they are written to call history and logs.",
+      "responseLabel": "Response record sanitization",
+      "responseDesc": "Mask sensitive information in model answers before storage (forwarding to downstream providers is unaffected).",
+      "ruleCount": "Active rules: {count}",
+      "hotHint": "Changes take effect immediately (no restart needed); after a restart the value falls back to the static config. Rule details and dry-run live in the security management pages.",
+      "saveFailed": "Failed to switch",
+      "savedOn": "\"{name}\" enabled",
+      "savedOff": "\"{name}\" disabled"
     },
     "defaultsFooter": "These are gateway-wide defaults. To adjust a single model, go to Connect Management → Model Management."
   }

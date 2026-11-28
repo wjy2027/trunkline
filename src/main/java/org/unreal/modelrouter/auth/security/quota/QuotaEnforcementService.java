@@ -62,6 +62,26 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class QuotaEnforcementService {
 
+    /**
+     * 请求属性键：API Key 使用者（{@code ApiKey.holder}），供用户 / 部门额度判定使用。
+     *
+     * <p>由 {@code ServiceRequestHandler} 认证成功后写入（见其 {@code QUOTA_HOLDER_ATTRIBUTE}
+     * 引用），常量归在读取方本类以避免跨类裸用；调用方写属性时直接引用本常量。</p>
+     */
+    public static final String QUOTA_HOLDER_ATTRIBUTE = "TRUNKLINE_QUOTA_HOLDER";
+
+    /** 请求属性键：holder 所属行政部门（holder→jwt_accounts.department 解析结果）。 */
+    public static final String QUOTA_DEPARTMENT_ATTRIBUTE = "TRUNKLINE_QUOTA_DEPARTMENT";
+
+    /**
+     * 请求属性键：调用归属租户（API Key 的 {@code tenantId}）。
+     *
+     * <p>与 holder / department 一样在认证成功后写入请求属性——<b>不能</b>只读
+     * {@link TenantContextHolder} 的 ThreadLocal：配额判定在 boundedElastic 线程执行，
+     * ThreadLocal 跨线程丢失会回落 default，导致租户维被 sentinel 静默跳过。</p>
+     */
+    public static final String QUOTA_TENANT_ATTRIBUTE = "TRUNKLINE_TENANT_ID";
+
     private final QuotaLedgerService ledgerService;
     private final QuotaProperties properties;
     private final ApiKeyService apiKeyService;
@@ -76,6 +96,30 @@ public class QuotaEnforcementService {
     @Autowired(required = false)
     @Qualifier("model")
     private QuotaLimitResolver modelLimitResolver;
+
+    /** 用户维度额度解析器（按 Key.holder 归集，未装配时该维度跳过） */
+    @Autowired(required = false)
+    @Qualifier("user")
+    private QuotaLimitResolver userLimitResolver;
+
+    /** 部门维度额度解析器（按 holder 所属部门归集，未装配时该维度跳过） */
+    @Autowired(required = false)
+    @Qualifier("department")
+    private QuotaLimitResolver departmentLimitResolver;
+
+    /** 租户维度额度解析器（按 Key 归属租户归集，未装配时该维度跳过） */
+    @Autowired(required = false)
+    @Qualifier("tenant")
+    private QuotaLimitResolver tenantLimitResolver;
+
+    /**
+     * 组织维金额扩展（企业侧 {@code @Primary} 装配；OSS 单仓未装配时为 null，行为零变化）。
+     *
+     * <p>必须用字段注入而非构造器强注入，否则 OSS 单仓启动即缺 Bean 失败；
+     * 与既有 resolver 的 fail-soft 范式一致。</p>
+     */
+    @Autowired(required = false)
+    private QuotaCheckExtension extension;
 
     /**
      * 单进程内按 API Key 串行化「判定 + 预留」，消除 check-then-act 双花窗口。
@@ -131,12 +175,37 @@ public class QuotaEnforcementService {
      * 窗口用量经 {@link QuotaLedgerService#usageStrict(QuotaDimension, QuotaWindow)} 读取，
      * 读不到用量（账本不可用）时不把缺失当成 0，而是直接降级放行。</p>
      *
+     * <p>租户维度取 {@link TenantContextHolder} 的 ThreadLocal——<b>仅适合</b>测试或
+     * 网关线程（租户上下文可靠）上的调用；boundedElastic 等工作线程上 ThreadLocal 已丢失
+     * （回落 default），生产链路请用带显式租户参数的
+     * {@link #evaluate(String, String, long)} 重载，或走 {@link #tryReserve}
+     * （按「请求属性 &gt; ThreadLocal」解析租户）。</p>
+     *
      * @param apiKeyId        API Key ID，{@code null} 或空串时直接放行
      * @param estimatedTokens 本次请求估算 token 数（负数按 0 处理）
      * @return 超限时返回被命中的限额；未超限、账本未启用、Key 未知、账本读不到用量或判定异常
      *         （fail-open）时返回 {@link Optional#empty()}
      */
     public Optional<QuotaLimitViolation> evaluate(final String apiKeyId, final long estimatedTokens) {
+        return evaluate(apiKeyId, TenantContextHolder.currentTenantId(), estimatedTokens);
+    }
+
+    /**
+     * 判定本次请求是否已超限（显式租户参数变体，跨线程安全）。
+     *
+     * <p>2026-11-27（中风险整改）：旧 {@link #evaluate(String, long)} 在工作线程上会因
+     * ThreadLocal 丢失把账本维度落到 default 租户。本重载要求调用方显式传入租户 ID
+     * （认证后写入的请求属性或 Key 绑定租户），传 {@code null} / 空串时按账本租户哨兵
+     * {@code default} 归一（与 {@link QuotaDimension} 的归一口径一致）。</p>
+     *
+     * @param apiKeyId        API Key ID，{@code null} 或空串时直接放行
+     * @param tenantId        调用归属租户（显式传入，不读 ThreadLocal）
+     * @param estimatedTokens 本次请求估算 token 数（负数按 0 处理）
+     * @return 超限时返回被命中的限额；未超限、账本未启用、Key 未知、账本读不到用量或判定异常
+     *         （fail-open）时返回 {@link Optional#empty()}
+     */
+    public Optional<QuotaLimitViolation> evaluate(final String apiKeyId, final String tenantId,
+                                                  final long estimatedTokens) {
         if (!isEnabled() || apiKeyId == null || apiKeyId.isEmpty()) {
             return Optional.empty();
         }
@@ -148,7 +217,7 @@ public class QuotaEnforcementService {
             }
             final LocalDateTime now = LocalDateTime.now(clock);
             final List<QuotaWindow> windows = properties.enabledWindows();
-            final QuotaDimension dimension = QuotaDimension.ofApiKey(apiKeyId, TenantContextHolder.currentTenantId());
+            final QuotaDimension dimension = QuotaDimension.ofApiKey(apiKeyId, tenantId);
             final long tokens = Math.max(0L, estimatedTokens);
 
             // 判定顺序：HOUR → DAY → MONTH → MINUTE（对齐上游 3.4.0 的优先级说明）
@@ -284,6 +353,43 @@ public class QuotaEnforcementService {
                                                     final String groupId,
                                                     final String model,
                                                     final long estimatedTokens) {
+        // 5 参存量调用点：从请求属性显式取 holder / department（认证后写入）。
+        // 不在此处填死空串——否则用户 / 部门额度永远读不到归属、静默失效。
+        return tryReserve(request, apiKeyId,
+                attr(request, QUOTA_HOLDER_ATTRIBUTE),
+                attr(request, QUOTA_DEPARTMENT_ATTRIBUTE),
+                groupId, model, estimatedTokens);
+    }
+
+    /**
+     * 判定并在放行时完成预留（多维度判定 + 记账 + 挂载结算凭据）。
+     *
+     * <p>在既有 Key / 分组 / 模型三维基础上，追加三层组织维（均由灰度开关控制、默认关）：</p>
+     * <ul>
+     *   <li><b>用户</b>：{@code holder} 非空且 {@code userScopeEnabled} 开时，按 holder 跨 Key 归集；</li>
+     *   <li><b>部门</b>：{@code department} 非空且 {@code departmentScopeEnabled} 开时，按行政部门归集；</li>
+     *   <li><b>租户</b>：当前租户非 default 且 {@code tenantScopeEnabled} 开时，按归属租户归集。</li>
+     * </ul>
+     *
+     * <p>任一维度超限即返回 429，并回滚本请求已在其它维度成功预留的增量。维度可能并存
+     * （Key / 用户 / 部门 / 租户 + 分组或模型），不再互斥。</p>
+     *
+     * @param request         请求（用于挂载结算凭据），可为 {@code null}
+     * @param apiKeyId        API Key ID（总闸）
+     * @param holder          使用者（ApiKey.holder），无则空串
+     * @param department      holder 所属部门，无则空串
+     * @param groupId         分组（模型分组 / 池）名称，无则传空串
+     * @param model           模型（已接入模型 / 实例）名称，无则传空串
+     * @param estimatedTokens 本次请求估算 token 数
+     * @return 超限结果；放行时为 {@link Optional#empty()}
+     */
+    public Optional<QuotaLimitViolation> tryReserve(final ServerHttpRequest request,
+                                                    final String apiKeyId,
+                                                    final String holder,
+                                                    final String department,
+                                                    final String groupId,
+                                                    final String model,
+                                                    final long estimatedTokens) {
         if (!isEnabled() || apiKeyId == null || apiKeyId.isEmpty()) {
             return Optional.empty();
         }
@@ -291,11 +397,36 @@ public class QuotaEnforcementService {
         synchronized (lock) {
             try {
                 final long tokens = Math.max(0L, estimatedTokens);
-                // 组装三维度与各自限额：Key 恒生效；分组 / 模型按需（互斥）
+                // 组装维度与各自限额：Key 恒生效；组织维 / 分组 / 模型按需
                 final List<QuotaDimension> dimensions = new ArrayList<>();
                 final List<QuotaLimitSet> limits = new ArrayList<>();
-                dimensions.add(QuotaDimension.ofApiKey(apiKeyId, TenantContextHolder.currentTenantId()));
+                // 租户来源优先级：请求属性（认证后写入，跨线程安全）> ThreadLocal 回退。
+                // 配额判定在 boundedElastic 线程执行，TenantContextHolder 的 ThreadLocal
+                // 在该线程已丢失（回落 default）——只读它会让租户维被 sentinel 静默跳过。
+                String tenantId = attr(request, QUOTA_TENANT_ATTRIBUTE);
+                if (tenantId.isEmpty()) {
+                    tenantId = TenantContextHolder.currentTenantId();
+                }
+                dimensions.add(QuotaDimension.ofApiKey(apiKeyId, tenantId));
                 limits.add(limitsOf(resolveApiKey(apiKeyId)));
+
+                // 组织维三层：逐维灰度开关 + 归属非空才参与；与总开关 isEnabled() 是「与」关系
+                if (properties.isUserScopeEnabled() && holder != null && !holder.isEmpty()) {
+                    dimensions.add(QuotaDimension.ofUser(holder));
+                    limits.add(resolveUserLimit(holder));
+                }
+                if (properties.isDepartmentScopeEnabled() && department != null && !department.isEmpty()) {
+                    dimensions.add(QuotaDimension.ofDepartment(department));
+                    limits.add(resolveDepartmentLimit(department));
+                }
+                // 租户维：Key 未绑非 default 租户时跳过（与行级过滤器开关无关）
+                if (properties.isTenantScopeEnabled()
+                        && tenantId != null && !tenantId.isEmpty()
+                        && !QuotaDimension.TENANT_SENTINEL.equals(tenantId)) {
+                    dimensions.add(QuotaDimension.ofTenant(tenantId));
+                    limits.add(resolveTenantLimit(tenantId));
+                }
+
                 if (groupId != null && !groupId.isEmpty()) {
                     dimensions.add(QuotaDimension.ofGroup(groupId));
                     limits.add(resolveGroupLimit(groupId));
@@ -320,18 +451,129 @@ public class QuotaEnforcementService {
                             QuotaRequest.of(dim, tokens), limit);
                     if (violation.isPresent()) {
                         rollbackDimensions(committed, tokens);
-                        log.warn("配额超限，拒绝请求: apiKeyId={}, scope={}, {}", apiKeyId, dim, violation.get().describe());
+                        log.warn("配额超限，拒绝请求: apiKeyId={}, scope={}, {}",
+                                apiKeyId, dim, violation.get().describeDetailed());
                         return violation;
                     }
                     committed.add(dim);
                 }
-                QuotaReservation.attach(request, new QuotaReservation(ledgerService, dimensions, tokens));
+                // 组织维金额层（企业扩展）：token 逐维预留完成后才判金额；
+                // 拒绝按三条契约处理——只用返回值、金额冲正 + token 回滚、异常兜底拒绝。
+                // 租户取上面已解析的 tenantId（请求属性优先），不能让 buildContext 再读
+                // ThreadLocal——boundedElastic 上会回落 default，租户金额账静默记错租户。
+                final QuotaCheckContext ctx = buildContext(
+                        tenantId, apiKeyId, holder, department, groupId, model, tokens);
+                final Optional<QuotaLimitViolation> denied;
+                try {
+                    denied = extension == null ? Optional.empty() : extension.preCheck(ctx);
+                } catch (RuntimeException e) {
+                    // 原子 CAS 下不存在部分写：异常时要么已预占（amountMinor 已设，冲正有效），
+                    // 要么未写账（amountMinor=0，onRolledBack 按纪律空操作），不会冲出负预占。
+                    log.error("金额扩展异常，按 fail-closed 拒绝: apiKeyId={}, error={}",
+                            apiKeyId, e.toString());
+                    rollbackAmountQuietly(extension, ctx);
+                    rollbackDimensions(committed, tokens);
+                    return Optional.of(amountExtensionUnavailable());
+                }
+                if (denied.isPresent()) {
+                    boolean amountRolledBack = true;
+                    try {
+                        if (extension != null) {
+                            extension.onRolledBack(ctx, ctx.amountMinor());
+                        }
+                    } catch (RuntimeException e) {
+                        log.error("金额预留冲正失败（需告警）: apiKeyId={}, error={}",
+                                apiKeyId, e.toString());
+                        amountRolledBack = false;
+                    }
+                    // 两条账独立：金额冲正失败也继续回滚 token，不能放任 token 留残量
+                    rollbackDimensions(committed, tokens);
+                    return amountRolledBack ? denied : Optional.of(amountRollbackFailed());
+                }
+
+                final QuotaReservation reservation =
+                        new QuotaReservation(ledgerService, dimensions, tokens, ctx, extension);
+                QuotaReservation.attach(request, reservation);
+                // onReserved 只做通知，不写账；失败只告警，不影响放行
+                if (extension != null) {
+                    try {
+                        extension.onReserved(ctx, ctx.amountMinor());
+                    } catch (RuntimeException e) {
+                        log.error("金额预占回调失败（需告警）: apiKeyId={}, error={}",
+                                apiKeyId, e.toString());
+                    }
+                }
                 return Optional.empty();
             } catch (Exception e) {
                 log.warn("配额预留异常，按 fail-open 放行: apiKeyId={}, error={}", apiKeyId, e.toString());
                 return Optional.empty();
             }
         }
+    }
+
+    /** 从请求属性读取字符串值，缺失或非字符串返回空串。 */
+    private static String attr(final ServerHttpRequest request, final String key) {
+        if (request == null) {
+            return "";
+        }
+        final Object value = request.getAttributes().get(key);
+        return value instanceof String s ? s : "";
+    }
+
+    /**
+     * 构造金额扩展上下文（租户 / 归属 / 估算 token / 判定时点全部来自 OSS 中性字段）。
+     *
+     * <p>租户由调用方显式传入（tryReserve 已按「请求属性 &gt; ThreadLocal」解析过）；
+     * 本方法绝不能再读 {@link TenantContextHolder}——配额判定在 boundedElastic 线程执行，
+     * ThreadLocal 跨线程丢失会回落 default，企业金额账会把租户维记错租户。</p>
+     */
+    private QuotaCheckContext buildContext(final String tenantId, final String apiKeyId,
+                                           final String holder, final String department,
+                                           final String groupId, final String model,
+                                           final long tokens) {
+        return new QuotaCheckContext(tenantId, apiKeyId,
+                holder, department, groupId, model, tokens, LocalDateTime.now(clock));
+    }
+
+    /** 金额扩展不可用时的中性拒绝结果（metric 不甩锅给具体主体）。 */
+    private static QuotaLimitViolation amountExtensionUnavailable() {
+        return new QuotaLimitViolation(
+                QuotaLimitViolation.METRIC_AMOUNT_EXT_UNAVAILABLE,
+                QuotaWindow.MONTH, 0L, 1L, 3600L, "金额额度", "AMOUNT", "extension");
+    }
+
+    /** 金额冲正失败时的中性拒绝结果（fail-closed 不打折）。 */
+    private static QuotaLimitViolation amountRollbackFailed() {
+        return new QuotaLimitViolation(
+                QuotaLimitViolation.METRIC_AMOUNT_EXT_UNAVAILABLE,
+                QuotaWindow.MONTH, 0L, 1L, 3600L, "金额额度", "AMOUNT", "rollback");
+    }
+
+    /** 金额冲正的异常兜底（自身 try-catch，失败只告警不阻断 token 回滚）。 */
+    private static void rollbackAmountQuietly(final QuotaCheckExtension ext,
+                                              final QuotaCheckContext ctx) {
+        if (ext == null || ctx == null) {
+            return;
+        }
+        try {
+            ext.onRolledBack(ctx, ctx.amountMinor());
+        } catch (RuntimeException e) {
+            log.error("金额预留冲正失败（需告警）: error={}", e.toString());
+        }
+    }
+
+    /**
+     * 组织维（用户 / 部门）归属解析是否需要：总开关 + 至少一个组织维开关打开。
+     *
+     * <p>供认证时机门控 holder→department 解析——两个组织维开关全关时零开销、零 DB。</p>
+     */
+    public boolean isOrgScopeResolutionNeeded() {
+        return isEnabled() && (properties.isUserScopeEnabled() || properties.isDepartmentScopeEnabled());
+    }
+
+    /** 部门额度开关是否打开（认证时机决定是否解析 department 用）。 */
+    public boolean isDepartmentScopeEnabled() {
+        return isEnabled() && properties.isDepartmentScopeEnabled();
     }
 
     /**
@@ -369,6 +611,51 @@ public class QuotaEnforcementService {
     }
 
     /**
+     * 解析用户维度的限额集合（未装配 / 解析异常时按无限制放行）。
+     */
+    private QuotaLimitSet resolveUserLimit(final String holder) {
+        if (userLimitResolver == null) {
+            return null;
+        }
+        try {
+            return userLimitResolver.resolve(holder).orElse(null);
+        } catch (Exception e) {
+            log.warn("解析用户配额限额失败，按无限制放行: holder={}, error={}", holder, e.toString());
+            return null;
+        }
+    }
+
+    /**
+     * 解析部门维度的限额集合（未装配 / 解析异常时按无限制放行）。
+     */
+    private QuotaLimitSet resolveDepartmentLimit(final String department) {
+        if (departmentLimitResolver == null) {
+            return null;
+        }
+        try {
+            return departmentLimitResolver.resolve(department).orElse(null);
+        } catch (Exception e) {
+            log.warn("解析部门配额限额失败，按无限制放行: department={}, error={}", department, e.toString());
+            return null;
+        }
+    }
+
+    /**
+     * 解析租户维度的限额集合（未装配 / 解析异常时按无限制放行）。
+     */
+    private QuotaLimitSet resolveTenantLimit(final String tenantId) {
+        if (tenantLimitResolver == null) {
+            return null;
+        }
+        try {
+            return tenantLimitResolver.resolve(tenantId).orElse(null);
+        } catch (Exception e) {
+            log.warn("解析租户配额限额失败，按无限制放行: tenantId={}, error={}", tenantId, e.toString());
+            return null;
+        }
+    }
+
+    /**
      * 解析模型（已接入模型 / 实例）维度的限额集合。
      *
      * <p><b>对外可见</b>：厂商模型维度的额度/限速只有在选完实例后才可判定（预留阶段只有虚拟模型名），
@@ -388,62 +675,6 @@ public class QuotaEnforcementService {
         } catch (Exception e) {
             log.warn("解析模型配额限额失败，按无限制放行: model={}, error={}", model, e.toString());
             return null;
-        }
-    }
-
-    /**
-     * 预留后的限额复核（用量已包含本笔预留）。
-     *
-     * <p>判定改为「已用量 &gt; 限额」（不再 +1），避免把刚预留的那一笔重复计算。</p>
-     *
-     * @param apiKeyId API Key ID
-     * @return 超限结果；未超限、配置缺失或读取失败（fail-open）时为空
-     */
-    private Optional<QuotaLimitViolation> evaluateAfterReserve(final String apiKeyId) {
-        try {
-            final ApiKey apiKey = resolveApiKey(apiKeyId);
-            if (apiKey == null) {
-                return Optional.empty();
-            }
-            final LocalDateTime now = LocalDateTime.now(clock);
-            final List<QuotaWindow> windows = properties.enabledWindows();
-            final QuotaDimension dimension = QuotaDimension.ofApiKey(apiKeyId, TenantContextHolder.currentTenantId());
-
-            // 复核顺序与 evaluate 一致：HOUR → DAY → MONTH → MINUTE；
-            // 语义为「已用量（含本笔预留）> 限额」，与预留时的「+1 > 限额」严格大于口径等价
-            for (final QuotaWindow window : new QuotaWindow[] {QuotaWindow.HOUR, QuotaWindow.DAY, QuotaWindow.MONTH}) {
-                if (!windows.contains(window)) {
-                    continue;
-                }
-                final long maxRequests = limitsOf(apiKey).maxRequests(window);
-                final long maxTokens = limitsOf(apiKey).maxTokens(window);
-                if (maxRequests <= 0L && maxTokens <= 0L) {
-                    continue;
-                }
-                final Optional<QuotaUsage> usage = ledgerService.usageStrict(dimension, window);
-                final long requests = usage.map(QuotaUsage::requestCount).orElse(0L);
-                final long tokens = usage.map(QuotaUsage::tokenCount).orElse(0L);
-                if (maxRequests > 0L && requests > maxRequests) {
-                    return Optional.of(violation(requestMetricFor(window), window,
-                            maxRequests, requests - 1L, now));
-                }
-                if (maxTokens > 0L && tokens > maxTokens) {
-                    return Optional.of(violation(tokenMetricFor(window), window,
-                            maxTokens, tokens, now));
-                }
-            }
-            if (windows.contains(QuotaWindow.MINUTE) && apiKey.getRateLimitPerMinute() > 0) {
-                final long requests = ledgerService.usageStrict(dimension, QuotaWindow.MINUTE)
-                        .map(QuotaUsage::requestCount).orElse(0L);
-                if (requests > apiKey.getRateLimitPerMinute()) {
-                    return Optional.of(violation(QuotaLimitViolation.METRIC_RATE_PER_MINUTE, QuotaWindow.MINUTE,
-                            apiKey.getRateLimitPerMinute(), requests - 1L, now));
-                }
-            }
-            return Optional.empty();
-        } catch (Exception e) {
-            log.debug("配额预留后复核失败，按 fail-open 放行: apiKeyId={}, error={}", apiKeyId, e.toString());
-            return Optional.empty();
         }
     }
 
@@ -495,26 +726,6 @@ public class QuotaEnforcementService {
             return Optional.of(violation(tokenMetricName, window, maxTokens, tokens, now));
         }
         return Optional.empty();
-    }
-
-    /** 取窗口对应的请求数限额指标名（供预留后复核使用）。 */
-    private static String requestMetricFor(final QuotaWindow window) {
-        return switch (window) {
-            case HOUR -> QuotaLimitViolation.METRIC_HOURLY_REQUESTS;
-            case DAY -> QuotaLimitViolation.METRIC_DAILY_REQUESTS;
-            case MONTH -> QuotaLimitViolation.METRIC_MONTHLY_REQUESTS;
-            case MINUTE -> QuotaLimitViolation.METRIC_RATE_PER_MINUTE;
-        };
-    }
-
-    /** 取窗口对应的 token 限额指标名（MINUTE 窗口无 token 限额，返回请求数指标名兜底，不会命中）。 */
-    private static String tokenMetricFor(final QuotaWindow window) {
-        return switch (window) {
-            case HOUR -> QuotaLimitViolation.METRIC_HOURLY_TOKENS;
-            case DAY -> QuotaLimitViolation.METRIC_DAILY_TOKENS;
-            case MONTH -> QuotaLimitViolation.METRIC_MONTHLY_TOKENS;
-            case MINUTE -> QuotaLimitViolation.METRIC_RATE_PER_MINUTE;
-        };
     }
 
     /**

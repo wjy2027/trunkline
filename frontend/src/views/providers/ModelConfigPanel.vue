@@ -436,39 +436,40 @@
       :title="quotaForm.name"
     />
     <el-form v-if="quotaForm" label-width="140px">
-      <div class="quota-group-title">{{ t('modelConfig.quotaGroupRate') }}</div>
-      <el-form-item label="每分钟请求上限">
+      <!-- 2026-11-28：各窗口分组随全局统计窗口联动（窗口关闭则整组不显示） -->
+      <div v-if="isQuotaFieldVisible('minuteRequests')" class="quota-group-title">{{ t('modelConfig.quotaGroupRate') }}</div>
+      <el-form-item v-if="isQuotaFieldVisible('minuteRequests')" label="每分钟请求上限">
         <el-input-number v-model="quotaForm.rateLimitPerMinute" :min="0" :step="10" />
         <span class="field-hint">{{ t('modelConfig.fieldPerMinute') }}</span>
       </el-form-item>
 
-      <div class="quota-group-title">{{ t('modelConfig.quotaGroupHourly') }}</div>
-      <el-form-item label="请求上限">
+      <div v-if="isQuotaFieldVisible('hourRequests') || isQuotaFieldVisible('hourTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupHourly') }}</div>
+      <el-form-item v-if="isQuotaFieldVisible('hourRequests')" label="请求上限">
         <el-input-number v-model="quotaForm.hourlyRequestLimit" :min="0" :step="100" />
         <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
       </el-form-item>
-      <el-form-item label="Token 上限">
+      <el-form-item v-if="isQuotaFieldVisible('hourTokens')" label="Token 上限">
         <el-input-number v-model="quotaForm.hourlyTokenLimit" :min="0" :step="1000" />
         <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
       </el-form-item>
 
-      <div class="quota-group-title">{{ t('modelConfig.quotaGroupDaily') }}</div>
-      <el-form-item label="请求上限">
+      <div v-if="isQuotaFieldVisible('dayRequests') || isQuotaFieldVisible('dayTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupDaily') }}</div>
+      <el-form-item v-if="isQuotaFieldVisible('dayRequests')" label="请求上限">
         <el-input-number v-model="quotaForm.dailyRequestLimit" :min="0" :step="100" />
         <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
       </el-form-item>
-      <el-form-item label="Token 上限">
+      <el-form-item v-if="isQuotaFieldVisible('dayTokens')" label="Token 上限">
         <el-input-number v-model="quotaForm.dailyTokenLimit" :min="0" :step="1000" />
         <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
       </el-form-item>
 
-      <div class="quota-group-title">{{ t('modelConfig.quotaGroupMonthly') }}</div>
+      <div v-if="isQuotaFieldVisible('monthRequests') || isQuotaFieldVisible('monthTokens')" class="quota-group-title">{{ t('modelConfig.quotaGroupMonthly') }}</div>
       <!-- 每月限额仅账本开启时真实生效；账本关闭时禁用（与「全部密钥」页口径一致） -->
-      <el-form-item label="请求上限">
+      <el-form-item v-if="isQuotaFieldVisible('monthRequests')" label="请求上限">
         <el-input-number v-model="quotaForm.monthlyRequestLimit" :min="0" :step="1000" :disabled="!multiWindowEnforced" />
         <span class="field-hint">{{ t('modelConfig.fieldRequests') }}</span>
       </el-form-item>
-      <el-form-item label="Token 上限">
+      <el-form-item v-if="isQuotaFieldVisible('monthTokens')" label="Token 上限">
         <el-input-number v-model="quotaForm.monthlyTokenLimit" :min="0" :step="10000" :disabled="!multiWindowEnforced" />
         <span class="field-hint">{{ t('modelConfig.fieldTokens') }}</span>
       </el-form-item>
@@ -605,6 +606,7 @@ import { usePersistedState } from '@/composables/usePersistedState'
 import { confirmDanger } from '@/utils/dangerConfirm'
 import { useDependencyGuard } from '@/composables/useDependencyGuard'
 import { useQuotaLedger } from '@/composables/useQuotaLedger'
+import { useQuotaWindows } from '@/composables/useQuotaWindows'
 import { useTableMaxHeight } from '@/composables/useTableMaxHeight'
 import type { InstanceRegionActionCtx } from '@/extension/types'
 
@@ -617,6 +619,8 @@ const enterpriseStore = useEnterpriseStore()
 provide('skeletonEmbedded', true)
 // 配额账本开关（单例探针）：关闭时额度配置弹窗里的每月字段禁用
 const { multiWindowEnforced, loadQuotaLedgerState } = useQuotaLedger()
+// 统计窗口联动（2026-11-28）：全局 windows 关闭的窗口，厂商模型配额分组不显示
+const { isFieldVisible: isQuotaFieldVisible } = useQuotaWindows()
 const { hasPermission } = usePermission()
 const canWrite = computed(() => hasPermission('config:instances:write'))
 

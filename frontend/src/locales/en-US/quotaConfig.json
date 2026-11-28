@@ -18,6 +18,9 @@
     "failOpenSwitchLabel": "Fail Open",
     "windowsLabel": "Stat Windows",
     "windowsPlaceholder": "Select windows",
+    "userScopeLabel": "Per-user quota (by holder)",
+    "departmentScopeLabel": "Per-department quota",
+    "tenantScopeLabel": "Per-tenant quota (by business unit)",
     "flushIntervalSecondsLabel": "Flush Interval (s)",
     "saveRuntimeConfig": "Save Configuration",
     "reset": "Reset",
@@ -37,6 +40,12 @@
     "retentionDayLabel": "Day Retention",
     "retentionMonthLabel": "Month Retention",
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "window": {
+      "minute": "Per minute",
+      "hour": "Per hour",
+      "day": "Per day",
+      "month": "Per month"
+    }
   }
 }

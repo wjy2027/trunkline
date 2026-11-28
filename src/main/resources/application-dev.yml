@@ -74,6 +74,12 @@ management:
 trunkline:
   call-history:
     record-level: SUMMARY   # 脱敏摘要（默认截断200字）；要完整诗文用 FULL（AES-256-GCM 加密存储）
+  enterprise:
+    pricing:
+      # 高级计价（普通/阶梯/时段 + 缓存分项）：默认关闭；开启后叠加 billing 功能位，
+      # /v1/enterprise/features 才返回 pricingAdvanced=true，模型配置页单价旁才显示
+      # 「高级计价规则」入口（EnterpriseFeaturesProviderImpl.pricingAdvanced）。
+      advanced-enabled: true
   security:
     enabled: true
     

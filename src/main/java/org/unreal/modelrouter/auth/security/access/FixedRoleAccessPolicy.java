@@ -116,6 +116,10 @@ public class FixedRoleAccessPolicy {
                 // 读对运维可见、写收紧 ADMIN；OSS 只留权限机制，付费规则 UI 全在企业子应用。
                 AccessRule.get("/api/config/pricing/**", AccessLevel.OPS),
                 AccessRule.write("/api/config/pricing/**", AccessLevel.ADMIN),
+                // 2026-11-28 高级计价热配置开关（全局配置 → 其他）：pricing-advanced 与 pricing
+                // 是不同路径段，Ant 通配不覆盖，须独立登记。读 OPS、写 ADMIN（热切换影响计费口径）。
+                AccessRule.get("/api/config/pricing-advanced/**", AccessLevel.OPS),
+                AccessRule.write("/api/config/pricing-advanced/**", AccessLevel.ADMIN),
                 AccessRule.get("/api/config/type/**", AccessLevel.OPS),
                 AccessRule.write("/api/config/type/**", AccessLevel.OPS),
 
@@ -263,6 +267,14 @@ public class FixedRoleAccessPolicy {
                 // 配额配置 / 配额监控
                 AccessRule.get("/api/config/quota/**", AccessLevel.OPS),
                 AccessRule.write("/api/config/quota/**", AccessLevel.OPS),
+                // 组织维额度（用户/部门/租户）：独立前缀，不落在 /api/config/quota/** 通配下
+                // （后者含 ModelQuotaController 的 PUT/DELETE /{modelName}，子路径会被吞）。
+                // 读 OPS / 写 ADMIN：额度定义是平台级策略，收紧写入到 ADMIN。
+                AccessRule.get("/api/config/quota-scope/**", AccessLevel.OPS),
+                AccessRule.write("/api/config/quota-scope/**", AccessLevel.ADMIN),
+                // 企业组织维金额额度：独立前缀（quota-amount），不与 quota/** 通配重叠
+                AccessRule.get("/api/config/quota-amount/**", AccessLevel.OPS),
+                AccessRule.write("/api/config/quota-amount/**", AccessLevel.ADMIN),
                 // 员工自助：我的密钥「本月已用」（服务端强制校验 keyId 属主），
                 // 必须先于 quota/** 的 OPS 通配规则命中（首条命中优先）
                 AccessRule.get("/api/monitoring/quota/mine/usage", AccessLevel.SELF),

@@ -23,6 +23,8 @@ import org.unreal.modelrouter.persistence.jpa.entity.TokenUsageEntity;
 import org.unreal.modelrouter.persistence.jpa.entity.JwtAccountEntity;
 import org.unreal.modelrouter.persistence.jpa.repository.JwtAccountRepository;
 import org.unreal.modelrouter.persistence.jpa.repository.TokenUsageRepository;
+import org.unreal.modelrouter.console.ConsoleExtensionStore;
+import org.unreal.modelrouter.console.GroupRoleMappingController;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -57,6 +59,8 @@ public class BillingService {
 
     private final TokenUsageRepository tokenUsageRepository;
     private final JwtAccountRepository jwtAccountRepository;
+    /** 稳定部门注册表（2026-11-28）：部门维度统计键由「部门文本」升级为稳定 deptId。 */
+    private final ConsoleExtensionStore consoleExtensionStore;
 
     /** 明细 metadata 中缓存 token 解析用的静态 ObjectMapper（fail-soft，无状态线程安全）。 */
     private static final ObjectMapper DETAIL_MAPPER = new ObjectMapper();
@@ -531,6 +535,34 @@ public class BillingService {
             }
         }
 
+        // 1.5 稳定部门注册表（2026-11-28）：部门维度统计键从「账号 department 文本」升级为
+        // 稳定 deptId——部门改名/重名不再拆分统计口径。登记表命中 → deptKey=deptId、
+        // 展示名=登记名；未登记（历史自由文本）→ deptKey=文本本身，行为与旧口径一致不丢数据。
+        final Map<String, String> deptNameToId = new HashMap<>();
+        final Map<String, String> deptIdToName = new HashMap<>();
+        try {
+            for (final Map<String, Object> deptRow : consoleExtensionStore.list(GroupRoleMappingController.DEPT_KEY)) {
+                final String id = String.valueOf(deptRow.get("deptId"));
+                final String name = String.valueOf(deptRow.get("name"));
+                if (id != null && !id.isBlank() && name != null && !name.isBlank()) {
+                    deptNameToId.put(name, id);
+                    deptIdToName.put(id, name);
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("部门注册表加载失败，团队用量退回部门文本口径: {}", e.toString());
+        }
+        /** 部门文本 → 统计键（登记部门→deptId，未登记→原文本） */
+        final java.util.function.UnaryOperator<String> deptKeyOf = text ->
+                deptNameToId.getOrDefault(text, text);
+        /** 统计键 → 展示名（deptId→登记名，其余原样） */
+        final java.util.function.UnaryOperator<String> deptLabelOf = key ->
+                deptIdToName.getOrDefault(key, key);
+        // 部门筛选参数兼容两种口径：传登记名 → 转 deptId；传 deptId 或历史文本 → 原样
+        final String deptFilterKey = department != null && !department.isBlank()
+                ? deptKeyOf.apply(department.trim())
+                : null;
+
         // 3. 逐人逐虚拟模型逐厂商模型聚合行（含失败调用，用于算成功率）
         final List<Object[]> rows =
                 tokenUsageRepository.aggregateByMonthUserVirtualModel(year, month);
@@ -564,12 +596,14 @@ public class BillingService {
                     ? rawVirtualModel : TeamUsageVO.UNASSIGNED_VIRTUAL_MODEL;
 
             final JwtAccountEntity account = accounts.get(userId);
-            final String dept = account != null && account.getDepartment() != null
+            final String deptText = account != null && account.getDepartment() != null
                     && !account.getDepartment().isBlank()
-                    ? account.getDepartment() : TeamUsageVO.UNASSIGNED_DEPARTMENT;
+                    ? account.getDepartment().trim() : TeamUsageVO.UNASSIGNED_DEPARTMENT;
+            // 统计键：登记部门→稳定 deptId；未登记→原文本（历史数据不丢）
+            final String deptKey = deptKeyOf.apply(deptText);
 
-            // 部门筛选
-            if (department != null && !department.isBlank() && !department.equals(dept)) {
+            // 部门筛选（参数为登记名/deptId/历史文本均可，统一翻译成统计键比较）
+            if (deptFilterKey != null && !deptFilterKey.equals(deptKey)) {
                 continue;
             }
 
@@ -588,10 +622,10 @@ public class BillingService {
                 hasUnpriced = true;
             }
 
-            // 分组键：按部门 = 部门名；全公司 = 用户名
-            final String groupKey = byDepartment ? dept : userId;
+            // 分组键：按部门 = 部门统计键（deptId/文本）；全公司 = 用户名
+            final String groupKey = byDepartment ? deptKey : userId;
             final String groupLabel = byDepartment
-                    ? dept
+                    ? deptLabelOf.apply(deptKey)
                     : (account != null ? account.getUsername() : userId);
             final Accumulator groupAcc = groups.computeIfAbsent(groupKey, k -> {
                 final Accumulator acc = new Accumulator();
@@ -622,9 +656,9 @@ public class BillingService {
                             key -> new ServiceTypeAccumulator());
             stAcc.add(prompt, completion, total, requests, amount);
 
-            // 部门汇总卡（不受「维度 / 部门筛选」影响，始终全量）
+            // 部门汇总卡（不受「维度 / 部门筛选」影响，始终全量）：键=统计键，展示=登记名
             final DepartmentAccumulator deptAcc =
-                    departments.computeIfAbsent(dept, key -> new DepartmentAccumulator());
+                    departments.computeIfAbsent(deptKey, key -> new DepartmentAccumulator());
             deptAcc.add(prompt, completion, total, requests, amount);
             deptAcc.users.add(userId);
 
@@ -734,7 +768,7 @@ public class BillingService {
         for (final Map.Entry<String, DepartmentAccumulator> entry : departments.entrySet()) {
             final DepartmentAccumulator acc = entry.getValue();
             departmentList.add(TeamUsageVO.DepartmentSummary.builder()
-                    .department(entry.getKey())
+                    .department(deptLabelOf.apply(entry.getKey()))
                     .userCount(acc.users.size())
                     .requestCount(acc.requests)
                     .totalTokens(acc.total)
@@ -807,19 +841,30 @@ public class BillingService {
     /**
      * 全部部门列表（去重排序）。
      *
-     * <p>供「团队用量」部门维度筛选下拉使用，避免前端硬编码部门清单。</p>
+     * <p>供「团队用量」部门维度筛选下拉使用。2026-11-28 起以稳定部门注册表为准
+     * （登记部门优先），并合并账号 department 里尚未登记的历史文本，保证旧数据
+     * 仍可被筛选——登记后下次请求即按 deptId 口径聚合。</p>
      */
     @Transactional(readOnly = true)
     public List<String> getDepartments() {
-        final List<String> departments = new ArrayList<>();
+        final java.util.TreeSet<String> departments = new java.util.TreeSet<>();
+        try {
+            for (final Map<String, Object> deptRow : consoleExtensionStore.list(GroupRoleMappingController.DEPT_KEY)) {
+                final String name = String.valueOf(deptRow.get("name"));
+                if (name != null && !name.isBlank()) {
+                    departments.add(name);
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("部门注册表加载失败，团队用量部门下拉退回账号文本口径: {}", e.toString());
+        }
         for (final JwtAccountEntity account : jwtAccountRepository.findAll()) {
             final String dept = account.getDepartment();
-            if (dept != null && !dept.isBlank() && !departments.contains(dept.trim())) {
+            if (dept != null && !dept.isBlank()) {
                 departments.add(dept.trim());
             }
         }
-        departments.sort(String::compareTo);
-        return departments;
+        return new ArrayList<>(departments);
     }
 
     /**

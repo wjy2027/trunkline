@@ -51,6 +51,15 @@
           <QuotaConfigManagement />
         </el-tab-pane>
 
+        <!-- 其他：暂未归类的零散功能开关（2026-11-28，目前只有高级计价热开关） -->
+        <el-tab-pane :label="t('globalSettings.tabs.misc')" name="misc">
+          <div class="tab-hint">
+            <p class="tab-hint__affects">{{ t('globalSettings.hints.misc.affects') }}</p>
+            <p class="tab-hint__when">{{ t('globalSettings.hints.misc.when') }}</p>
+          </div>
+          <MiscSettings />
+        </el-tab-pane>
+
         <!-- 底部出口：说明这些是默认值，单个模型要去接入管理调 -->
         <el-alert
           type="info"
@@ -102,6 +111,7 @@ import LoadBalancerGlobalConfig from '@/views/load-balancer/LoadBalancerGlobalCo
 import ServiceStrategyList from '@/views/load-balancer/StrategyConfig.vue'
 import CircuitBreakerGlobalConfig from '@/views/circuit-breaker/GlobalConfig.vue'
 import QuotaConfigManagement from '@/views/config/QuotaConfigManagement.vue'
+import MiscSettings from '@/views/config/MiscSettings.vue'
 import { menuSubtitle } from '@/config/menu'
 import {
   LOAD_BALANCER_GLOBAL_CONFIG_KEY,
@@ -118,7 +128,7 @@ const { t } = useI18n()
 // 否则「服务级配置」卡片 inject 拿不到全局默认值。
 provide(LOAD_BALANCER_GLOBAL_CONFIG_KEY, loadBalancerGlobalConfig)
 
-const TABS = ['record', 'lb', 'circuit', 'quota'] as const
+const TABS = ['record', 'lb', 'circuit', 'quota', 'misc'] as const
 type TabKey = (typeof TABS)[number]
 
 const active = ref<TabKey>(TABS.includes(route.query.tab as TabKey) ? (route.query.tab as TabKey) : 'record')

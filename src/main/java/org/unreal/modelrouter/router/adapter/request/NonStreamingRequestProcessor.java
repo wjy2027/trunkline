@@ -127,7 +127,9 @@ public class NonStreamingRequestProcessor {
         String instanceName = selectedInstance.getName();
         // v2.8.9: 池路由后,下游请求 model 改写为实际实例模型名(虚拟模型名不再透传上游)
         String requestedModel = tokenUsageExtractor.extractRequestModel(request);
-        transformedRequest = tokenUsageExtractor.rewriteModelField(transformedRequest, requestedModel, instanceName);
+        // 网关凭据优先：处理器线程上租户上下文不可达时 isPoolName 误判，池名会透传上游(404)
+        transformedRequest = tokenUsageExtractor.rewriteModelField(transformedRequest, requestedModel,
+                instanceName, gatewayRewriteTarget(httpRequest));
         long requestStartTime = System.currentTimeMillis();
 
         // v2.9.2: 记录治理 - 序列化转换后的请求体用于调用历史捕获
@@ -373,8 +375,9 @@ public class NonStreamingRequestProcessor {
 
                         // 响应转换
                         Object transformedData = transformResponseFn.apply(downstreamData);
-                        // v2.8.9: 池路由后,响应 model 回显实际实例模型名
-                        transformedData = tokenUsageExtractor.rewriteModelField(transformedData, requestedModel, instanceName);
+                        // v2.8.9: 池路由后,响应 model 回显实际实例模型名（网关凭据优先，理由同请求侧）
+                        transformedData = tokenUsageExtractor.rewriteModelField(transformedData, requestedModel,
+                                instanceName, gatewayRewriteTarget(httpRequest));
 
                         // v2.9.9: 响应缓存写 — 仅 2xx 成功分支到达此处(非2xx 已先行短路)；
                         // 流式/非确定性/未启用请求键为空，此处不写
@@ -633,6 +636,19 @@ public class NonStreamingRequestProcessor {
             return callHistoryProperties.getRecordLevel();
         }
         return RecordLevel.METADATA_ONLY;
+    }
+
+    /**
+     * 读取网关下发的池名改写凭据（见 {@link TokenUsageExtractor#GATEWAY_MODEL_REWRITE_ATTRIBUTE}）。
+     * 请求属性随 ServerHttpRequest 走，与执行线程无关，规避 boundedElastic 上租户上下文缺失。
+     */
+    private String gatewayRewriteTarget(final ServerHttpRequest httpRequest) {
+        if (httpRequest == null) {
+            return null;
+        }
+        final Object target = httpRequest.getAttributes()
+                .get(TokenUsageExtractor.GATEWAY_MODEL_REWRITE_ATTRIBUTE);
+        return target instanceof String ? (String) target : null;
     }
 
     /**

@@ -109,7 +109,8 @@ public class QuotaConfigController {
         }
 
         if (request.enabled == null && request.failOpen == null
-                && request.windows == null) {
+                && request.windows == null && request.userScopeEnabled == null
+                && request.departmentScopeEnabled == null && request.tenantScopeEnabled == null) {
             return ResponseEntity.badRequest()
                     .body(RouterResponse.error("至少需要指定一个可热改的配置参数", "INVALID_REQUEST"));
         }
@@ -130,6 +131,18 @@ public class QuotaConfigController {
             quotaProperties.setWindows(parsed);
             log.info("配额 windows 已热改为: {}", parsed);
         }
+        if (request.userScopeEnabled != null) {
+            quotaProperties.setUserScopeEnabled(request.userScopeEnabled);
+            log.info("配额 userScopeEnabled 已热改为: {}", request.userScopeEnabled);
+        }
+        if (request.departmentScopeEnabled != null) {
+            quotaProperties.setDepartmentScopeEnabled(request.departmentScopeEnabled);
+            log.info("配额 departmentScopeEnabled 已热改为: {}", request.departmentScopeEnabled);
+        }
+        if (request.tenantScopeEnabled != null) {
+            quotaProperties.setTenantScopeEnabled(request.tenantScopeEnabled);
+            log.info("配额 tenantScopeEnabled 已热改为: {}", request.tenantScopeEnabled);
+        }
         log.info("配额运行时配置已更新");
         return ResponseEntity.ok(RouterResponse.success(buildSnapshot(), "配额配置已更新"));
     }
@@ -146,6 +159,11 @@ public class QuotaConfigController {
         snap.put("windows", windowNames(quotaProperties.enabledWindows()));
         snap.put("flushIntervalSeconds", quotaProperties.getFlushIntervalSeconds());
 
+        // 组织维额度灰度开关（用户/部门/租户，默认关，可热改）
+        snap.put("userScopeEnabled", quotaProperties.isUserScopeEnabled());
+        snap.put("departmentScopeEnabled", quotaProperties.isDepartmentScopeEnabled());
+        snap.put("tenantScopeEnabled", quotaProperties.isTenantScopeEnabled());
+
         final Map<String, String> retentionMap = new LinkedHashMap<>();
         for (final QuotaWindow w : QuotaWindow.values()) {
             retentionMap.put(w.name().toLowerCase(), quotaProperties.retentionSpec(w));
@@ -161,7 +179,9 @@ public class QuotaConfigController {
 
         snap.put("backendName", ledgerService.backendName());
 
-        final List<String> hotEditable = List.of("enabled", "failOpen", "windows");
+        final List<String> hotEditable = List.of(
+                "enabled", "failOpen", "windows",
+                "userScopeEnabled", "departmentScopeEnabled", "tenantScopeEnabled");
         final List<String> restartRequired = List.of(
                 "distributed.enabled", "distributed.keyPrefix",
                 "distributed.timeoutMs", "distributed.degradeToLocal", "retention.*",
@@ -234,6 +254,15 @@ public class QuotaConfigController {
 
         /** 启用的窗口列表（可热改，如 ["MINUTE", "HOUR", "DAY"]） */
         public List<String> windows;
+
+        /** 用户维度额度是否启用（可热改，默认 false） */
+        public Boolean userScopeEnabled;
+
+        /** 部门维度额度是否启用（可热改，默认 false） */
+        public Boolean departmentScopeEnabled;
+
+        /** 租户维度额度是否启用（可热改，默认 false） */
+        public Boolean tenantScopeEnabled;
 
         /** 快照落库间隔秒数（需重启，受 Spring @Scheduled 限制） */
         public Long flushIntervalSeconds;

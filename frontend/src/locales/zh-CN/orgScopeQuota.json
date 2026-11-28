@@ -1,0 +1,43 @@
+{
+  "orgScopeQuota": {
+    "title": "组织维额度",
+    "hint": "按用户 / 部门 / 租户归集的 token 额度；0 表示不限；需先在上方开启对应开关",
+    "scopes": {
+      "users": "用户额度",
+      "departments": "部门额度",
+      "tenants": "租户额度"
+    },
+    "hints": {
+      "users": "scopeId 填使用者名（ApiKey 的持有人），跨该人的所有密钥归集",
+      "departments": "scopeId 填行政部门名，按账号所属部门归集",
+      "tenants": "scopeId 填租户 ID（产品线 / 项目组等），仅对 Key 绑定的非 default 租户生效"
+    },
+    "scopeId": "主体标识",
+    "scopeIdPlaceholder": "用户 / 部门 / 租户标识",
+    "scopeIdRequired": "主体标识不能为空",
+    "minuteRequests": "分钟请求数",
+    "hourRequests": "小时请求数",
+    "hourTokens": "小时 Token",
+    "dayRequests": "日请求数",
+    "dayTokens": "日 Token",
+    "monthRequests": "月请求数",
+    "monthTokens": "月 Token",
+    "actions": "操作",
+    "add": "新增额度",
+    "edit": "编辑",
+    "delete": "删除",
+    "empty": "暂无额度配置（该维度不限）",
+    "zeroMeansUnlimited": "数值 0 表示该窗口不限制；所有窗口均为 0 时该主体用量只记账不判定",
+    "saved": "额度已保存",
+    "saveFailed": "保存失败，请稍后重试",
+    "deleted": "额度已删除",
+    "deleteFailed": "删除失败，请稍后重试",
+    "deleteConfirm": "确认删除「{id}」的额度配置？删除后该主体不再参与额度判定。",
+    "quotaFor": "{id} 的配额",
+    "quotaButton": "配额",
+    "monthlyAmount": "月度金额上限（¥/月）",
+    "monthlyAmountPlaceholder": "不限制",
+    "monthlyAmountHint": "按当月实际花费限制金额（企业版金额账本，当月生效）；清空表示不限。",
+    "monthlyAmountUnavailable": "月度金额限制需要企业版（billing 许可），当前部署不可用；上方窗口额度不受影响。"
+  }
+}

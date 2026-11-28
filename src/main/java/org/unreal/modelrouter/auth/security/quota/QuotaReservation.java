@@ -41,6 +41,13 @@ public final class QuotaReservation {
     private final AtomicBoolean failed = new AtomicBoolean(false);
 
     /**
+     * 金额扩展上下文与实例（2026-11-27）：未装配企业扩展时两者均为 null，
+     * 结算链路零行为变化。context 持有跨异步边界的金额槽（AtomicLong）。
+     */
+    private final QuotaCheckContext context;
+    private final QuotaCheckExtension extension;
+
+    /**
      * 追加的维度（v3.5 治理收口：选实例后才确定的「实例」维度）。
      *
      * <p>预留发生在实例选择之前，此时只知道分组（虚拟模型名），不知道最终落到哪个实例。
@@ -62,7 +69,7 @@ public final class QuotaReservation {
     public QuotaReservation(final QuotaLedgerService ledgerService,
                             final QuotaDimension dimension,
                             final long estimatedTokens) {
-        this(ledgerService, List.of(dimension), estimatedTokens);
+        this(ledgerService, List.of(dimension), estimatedTokens, null, null);
     }
 
     /**
@@ -75,10 +82,29 @@ public final class QuotaReservation {
     public QuotaReservation(final QuotaLedgerService ledgerService,
                             final List<QuotaDimension> dimensions,
                             final long estimatedTokens) {
+        this(ledgerService, dimensions, estimatedTokens, null, null);
+    }
+
+    /**
+     * 主构造：企业金额扩展随凭据一起传递，保证结算回调恰一次。
+     *
+     * @param ledgerService   账本服务
+     * @param dimensions      账本维度列表（Key / 组织维 / 分组 / 模型）
+     * @param estimatedTokens 预留时使用的估算 token 数
+     * @param context         金额扩展上下文，可为 {@code null}
+     * @param extension       金额扩展实例，可为 {@code null}
+     */
+    public QuotaReservation(final QuotaLedgerService ledgerService,
+                            final List<QuotaDimension> dimensions,
+                            final long estimatedTokens,
+                            final QuotaCheckContext context,
+                            final QuotaCheckExtension extension) {
         this.ledgerService = ledgerService;
         this.dimensions = dimensions == null || dimensions.isEmpty()
             ? List.of(QuotaDimension.empty()) : List.copyOf(dimensions);
         this.estimatedTokens = Math.max(0L, estimatedTokens);
+        this.context = context;
+        this.extension = extension;
     }
 
     /**
@@ -271,6 +297,21 @@ public final class QuotaReservation {
             return;
         }
         failed.set(isFailed);
+        // 金额回调：放在 compareAndSet 之后、结算循环之外——不被 ledgerService.settle()
+        // 的 catch-all 吞掉；自身 try-catch，失败只告警不影响主链路。
+        if (context != null && extension != null) {
+            try {
+                final long amount = context.amountMinor();
+                if (isFailed) {
+                    extension.onRolledBack(context, amount);
+                } else {
+                    extension.onCommitted(context, amount);
+                }
+            } catch (RuntimeException e) {
+                log.error("金额结算回调失败（需告警）: failed={}, error={}",
+                        isFailed, e.toString());
+            }
+        }
         // 结算需覆盖「预留时维度 + 追加维度」（追加维度在选实例后才确定）
         final List<QuotaDimension> allDimensions = dimensions();
         final List<QuotaSettlement> settlements = new ArrayList<>(allDimensions.size());

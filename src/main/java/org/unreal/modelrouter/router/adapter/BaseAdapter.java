@@ -504,7 +504,11 @@ public abstract class BaseAdapter implements ServiceCapability {
         }
         // 用已选中的实例构造 WebClient：客户端目标与指标归属实例保持一致
         WebClient client = getWebClientForInstance(selectedInstance);
-        String path = getModelPath(serviceType, modelName);
+        // 池路由 path 兜底：registry.getModelPath 的池回退依赖租户上下文（PoolSelector 按租户隔离池），
+        // 而这里可能运行在 boundedElastic 线程上，ThreadLocal 租户上下文不可用，按池名回退查找会落空
+        // 返回 ""，转发打到上游 baseUrl 根路径（上游 404 → 触发降级 503）。已选中的实例就是本次
+        // 转发的目标，其自带 path 与请求模型名无关，直接兜底使用。
+        String path = resolveForwardPath(getModelPath(serviceType, modelName), selectedInstance);
         long startTime = System.currentTimeMillis();
         String adapterType = getAdapterType();
         String modelNameFromRequest = ModelUtils.getModelNameFromRequest(request);
@@ -616,7 +620,7 @@ public abstract class BaseAdapter implements ServiceCapability {
                         WebClient nextClient = (nextInstance != selectedInstance)
                                 ? getWebClientForInstance(nextInstance) : client;
                         String nextPath = (nextInstance != selectedInstance)
-                                ? getModelPath(serviceType, modelName) : path;
+                                ? resolveForwardPath(getModelPath(serviceType, modelName), nextInstance) : path;
                         return Mono.delay(Duration.ofMillis(retryDelay))
                                 .then(processRequestWithRetry(request, authorization, nextClient, nextPath,
                                         nextInstance, serviceType, modelName, processor,
@@ -917,6 +921,27 @@ public abstract class BaseAdapter implements ServiceCapability {
 
     protected String getModelPath(final ModelServiceRegistry.ServiceType serviceType, final String modelName) {
         return requestSupport.getInstanceSelector().getModelPath(serviceType, modelName);
+    }
+
+    /**
+     * 转发 path 兜底解析：registry.getModelPath 解析为空时，回退用实例自带的 path。
+     *
+     * <p>背景：按池名调用时，registry.getModelPath 的池回退需要租户上下文（PoolSelector 按
+     * 租户隔离池），但本调用链在 boundedElastic 线程上没有 ThreadLocal 租户上下文，池查找落空
+     * 返回 ""，导致转发打到上游 baseUrl 根路径（上游 404 → 降级 503）。实例选择发生在网关侧
+     * （有租户上下文），选中的实例对象本身携带正确 path，与请求模型名无关，可直接兜底。</p>
+     *
+     * @param path     registry.getModelPath 的解析结果（可能为 null/空）
+     * @param instance 本次转发选中的目标实例；为 null 或其 path 也为空时原样返回 path
+     * @return 非空的转发 path（兜底后仍为空则原样返回，由下游按既有逻辑处理）
+     */
+    private String resolveForwardPath(final String path,
+            final ModelRouterProperties.ModelInstance instance) {
+        if ((path == null || path.isEmpty())
+                && instance != null && instance.getPath() != null && !instance.getPath().isEmpty()) {
+            return instance.getPath();
+        }
+        return path;
     }
 
     protected Object transformRequest(final Object request, final String adapterType) {

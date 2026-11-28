@@ -73,15 +73,26 @@
       "deleteConfirmMessage": "确定要删除账户 \"{username}\" 吗？此操作不可恢复！",
       "confirmDelete": "确定删除",
       "deleteSuccess": "账户删除成功",
-      "deleteFailed": "账户删除失败"
+      "deleteFailed": "账户删除失败",
+      "relatedKeys": "{count} 把绑定密钥",
+      "relatedQuota": "1 条用户额度配置",
+      "relatedImpact": "检测到关联数据：{detail}。删除账号将一并清理以上关联数据，且不可恢复。",
+      "cascadeRemedy": "密钥与额度配置删除后无法找回；如需保留请先在「全部密钥」页转移持有人。",
+      "cascadeConfirm": "删除并清理关联数据",
+      "cascadePartialFailed": "部分关联数据清理失败，请到「全部密钥」页与组织维额度面板手动检查。"
     },
     "department": "部门",
-    "departmentPlaceholder": "选择或输入部门（如 研发部）",
-    "departmentHint": "部门用于「团队用量」按部门统计；同一部门的用量会汇总在一起。",
+    "departmentPlaceholder": "选择已登记部门",
+    "departmentHint": "只能从已登记部门中选择；新部门点「新增部门」先登记（生成稳定部门 ID，团队用量按部门统计依赖它）。",
     "departmentUnassigned": "未分配部门",
     "name": "姓名",
     "namePlaceholder": "请输入用户姓名",
     "nameHint": "用于显示的真实姓名，便于识别账号归属人；留空则展示「未填写」。",
-    "nameUnassigned": "未填写"
+    "nameUnassigned": "未填写",
+    "departmentAdd": "新增部门",
+    "departmentAddHint": "输入新部门名称并确认：先登记进部门注册表（生成稳定部门 ID），再选入当前账号。",
+    "departmentNamePlaceholder": "部门名称（如 研发部）",
+    "departmentNameRequired": "部门名称不能为空",
+    "departmentAddOk": "部门「{name}」已登记"
   }
 }

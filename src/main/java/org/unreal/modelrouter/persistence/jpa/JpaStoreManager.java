@@ -12,6 +12,7 @@ import org.unreal.modelrouter.persistence.store.StoreManager;
 import org.unreal.modelrouter.common.util.JacksonHelper;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,9 +55,24 @@ public class JpaStoreManager implements StoreManager {
         try {
             String configValue = JacksonHelper.getObjectMapper().writeValueAsString(config);
 
-            // E1: 当前值固定落 version=0 行（不再依赖 isLatest 标志定位）
-            Optional<ConfigEntity> existingEntity =
-                    configRepository.findByConfigKeyAndVersion(key, CURRENT_CONFIG_VERSION);
+            // E1: 当前值固定落 version=0 行（不再依赖 isLatest 标志定位）。
+            // 容错读取 + 写入时自愈去重：同 key 同版本重复行（历史脏数据/异常写入）会导致
+            // 精确单行查询抛 IncorrectResultSizeDataAccessException，进而炸掉整条初始化链路
+            // （2026-11-28 实测：security.api-keys 双 v0 行 → 重启后 API Key 库清空）。
+            final List<ConfigEntity> currentRows =
+                    configRepository.findAllByConfigKeyAndVersion(key, CURRENT_CONFIG_VERSION);
+            if (currentRows.size() > 1) {
+                log.warn("Detected {} duplicate current rows for key: {}, healing (keep max id)",
+                        currentRows.size(), key);
+                currentRows.sort(Comparator.comparing(ConfigEntity::getId).reversed());
+                for (final ConfigEntity extra : currentRows.subList(1, currentRows.size())) {
+                    configRepository.delete(extra);
+                }
+            }
+            final Optional<ConfigEntity> existingEntity =
+                    currentRows.isEmpty()
+                            ? Optional.empty()
+                            : Optional.of(currentRows.get(0));
 
             if (existingEntity.isPresent()) {
                 ConfigEntity entity = existingEntity.get();
@@ -90,8 +106,9 @@ public class JpaStoreManager implements StoreManager {
         // 若本方法不带事务，Spring Data 仓库方法自带的事务在切面之后才开启，切面跳过过滤 →
         // findByConfigKeyAndVersion(key, 0) 返回所有租户的行 → NonUniqueResultException
         // 被调用方（如 PoolPersistenceService.loadAll）吞成空集合，表现为「切租户/新建后看不到数据」。
+        // 容错读取（2026-11-28）：重复行取 id 最大者，不让脏数据把读链路炸成异常。
         final Optional<ConfigEntity> currentRow =
-                configRepository.findByConfigKeyAndVersion(key, CURRENT_CONFIG_VERSION);
+                configRepository.findFirstByConfigKeyAndVersionOrderByIdDesc(key, CURRENT_CONFIG_VERSION);
         if (currentRow.isPresent()) {
             return deserializeConfig(currentRow.get());
         }
@@ -182,7 +199,7 @@ public class JpaStoreManager implements StoreManager {
         if (version == CURRENT_CONFIG_VERSION) {
             return getConfig(key);
         }
-        return configRepository.findByConfigKeyAndVersion(key, version)
+        return configRepository.findFirstByConfigKeyAndVersionOrderByIdDesc(key, version)
                 .map(this::deserializeConfig)
                 .orElse(null);
     }
@@ -207,7 +224,7 @@ public class JpaStoreManager implements StoreManager {
 
     @Override
     public LocalDateTime getVersionCreatedTime(final String key, final int version) {
-        return configRepository.findByConfigKeyAndVersion(key, version)
+        return configRepository.findFirstByConfigKeyAndVersionOrderByIdDesc(key, version)
                 .map(ConfigEntity::getCreatedAt)
                 .orElse(null);
     }
