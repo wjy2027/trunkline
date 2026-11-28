@@ -43,13 +43,13 @@
       "loadFailed": "Failed to load advanced pricing state"
     },
     "sanitization": {
-      "title": "PII Sanitization",
-      "requestLabel": "Request record sanitization",
-      "requestDesc": "Mask PII (phone numbers, ID numbers, emails, etc.) in chat requests before they are written to call history and logs.",
-      "responseLabel": "Response record sanitization",
-      "responseDesc": "Mask sensitive information in model answers before storage (forwarding to downstream providers is unaffected).",
+      "title": "Privacy masking (PII)",
+      "requestLabel": "Mask user requests",
+      "requestDesc": "If the user's message contains private info such as phone numbers, ID numbers or emails, it is masked (e.g. 138****5678) before being written to call history and logs; the raw text is not stored.",
+      "responseLabel": "Mask model answers",
+      "responseDesc": "If a model answer carries private info, it is masked the same way before being stored; what the user actually receives is unchanged — this only affects archived records.",
       "ruleCount": "Active rules: {count}",
-      "hotHint": "Changes take effect immediately (no restart needed); after a restart the value falls back to the static config. Rule details and dry-run live in the security management pages.",
+      "hotHint": "Takes effect immediately (no restart); after a restart the value falls back to the static config. Rule details and dry-run live in the security pages.",
       "saveFailed": "Failed to switch",
       "savedOn": "\"{name}\" enabled",
       "savedOff": "\"{name}\" disabled"

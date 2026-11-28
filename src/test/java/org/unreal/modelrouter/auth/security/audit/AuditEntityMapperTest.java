@@ -276,7 +276,8 @@ class AuditEntityMapperTest {
             assertEquals(AuditEventType.JWT_TOKEN_ISSUED, mapper.parseEventType("JWT_TOKEN_ISSUED"));
             assertEquals(AuditEventType.API_KEY_CREATED, mapper.parseEventType("API_KEY_CREATED"));
             assertEquals(AuditEventType.AUTHENTICATION_FAILED, mapper.parseEventType("AUTHENTICATION_FAILED"));
-            // 高级计价规则变更走 B1 哈希链（非 persistable 列），但事件名必须可解析，禁止落 SYSTEM 掩盖真名
+            // 高级计价规则变更现已进 V3 白名单（可落 security_audit.event_type 列），
+            // 但无论是否 persistable，事件名都必须可解析，禁止落 SYSTEM 掩盖真名
             assertEquals(AuditEventType.PRICING_RULE_CHANGED, mapper.parseEventType("PRICING_RULE_CHANGED"));
         }
 

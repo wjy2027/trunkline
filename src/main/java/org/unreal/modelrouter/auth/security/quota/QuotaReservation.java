@@ -108,21 +108,27 @@ public final class QuotaReservation {
     }
 
     /**
-     * 把凭据挂载到请求属性（供链路末端的结算点取回）。
+     * 把预留凭据挂到请求属性上，供响应后结算取回。
      *
-     * <p>请求为 {@code null} 或属性不可写时静默忽略：配额是旁路能力，不得影响主链路。</p>
+     * <p><b>2026-11-28 评审修复（中危）</b>：返回值从 void 改为 boolean——旧实现吞掉
+     * 属性写入异常后照常放行，结算侧拿到 null 凭据 → 金额预占永不冲正/结算（泄漏）。
+     * 现在调用方（{@code QuotaEnforcementService.tryReserve}）在挂载失败时全量回滚
+     * （金额 + token 维度）并按拒绝返回，杜绝「已放行但永不结算」。</p>
      *
-     * @param request     请求，可为 {@code null}
-     * @param reservation 凭据，{@code null} 时不做任何处理
+     * @param request     请求，可为 {@code null}（返回 false）
+     * @param reservation 凭据，{@code null} 时不做任何处理（返回 false）
+     * @return true = 已挂载；false = 挂载失败，调用方必须回滚本次预留
      */
-    public static void attach(final ServerHttpRequest request, final QuotaReservation reservation) {
+    public static boolean attach(final ServerHttpRequest request, final QuotaReservation reservation) {
         if (request == null || reservation == null) {
-            return;
+            return false;
         }
         try {
             request.getAttributes().put(ATTRIBUTE, reservation);
+            return true;
         } catch (Exception e) {
-            log.warn("配额预留凭据挂载失败（忽略，结算将回退为不冲正）: error={}", e.toString());
+            log.warn("配额预留凭据挂载失败（调用方应回滚本次预留）: error={}", e.toString());
+            return false;
         }
     }
 

@@ -493,7 +493,16 @@ public class QuotaEnforcementService {
 
                 final QuotaReservation reservation =
                         new QuotaReservation(ledgerService, dimensions, tokens, ctx, extension);
-                QuotaReservation.attach(request, reservation);
+                // 评审修复（中危）：挂载失败（属性表不可写等）若照旧放行，结算侧拿不到凭据
+                // → 金额预占永不冲正/结算（泄漏）。挂载失败必须全量回滚（金额 + token）并拒绝。
+                final boolean attached = QuotaReservation.attach(request, reservation);
+                if (!attached || QuotaReservation.from(request) != reservation) {
+                    log.error("配额预留凭据挂载失败（或回读不一致），全量回滚并拒绝: apiKeyId={}, "
+                            + "amountMinor={}, tokens={}", apiKeyId, ctx.amountMinor(), tokens);
+                    rollbackAmountQuietly(extension, ctx);
+                    rollbackDimensions(committed, tokens);
+                    return Optional.of(amountExtensionUnavailable());
+                }
                 // onReserved 只做通知，不写账；失败只告警，不影响放行
                 if (extension != null) {
                     try {

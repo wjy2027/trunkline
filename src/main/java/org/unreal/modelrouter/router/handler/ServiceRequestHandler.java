@@ -366,8 +366,13 @@ public class ServiceRequestHandler {
                 }
 
                 // 组织维额度（用户 / 部门）：认证后一次性解析归属写入请求属性，配额执行层从属性读，
-                // 零热路径查库。仅在总开关 + 组织维开关打开时执行（其余请求零开销）；整条链已
-                // subscribeOn(boundedElastic)，department 解析的一次 DB 读不占 Netty EventLoop。
+                // 零热路径查库。仅在总开关 + 组织维开关打开时执行（其余请求零开销）。
+                // 【评审修复（中危）】resolve() 的冷 miss 是一次同步 DB 读，必须离开 Netty
+                // EventLoop——旧注释「整条链已 subscribeOn(boundedElastic)」不成立：subscribeOn
+                // 只覆盖 handleWithInstanceAdapter 内部的 defer 段，本 flatMap 同步段仍在
+                // 事件循环线程执行。现把 department 解析（唯一 DB 操作）挂到 boundedElastic，
+                // 完成后再进入适配链；holder 属性写入是纯内存操作，保留在当前线程。
+                Mono<Void> orgScopeResolution = Mono.empty();
                 if (quotaEnforcementService != null
                         && quotaEnforcementService.isOrgScopeResolutionNeeded()
                         && auth instanceof ApiKeyAuthentication quotaKeyAuth) {
@@ -380,11 +385,13 @@ public class ServiceRequestHandler {
                         httpRequest.getAttributes().put(QUOTA_HOLDER_ATTRIBUTE, holder);
                         // 部门维单独门控：仅部门额度开关打开才解析 holder→department（缓存 + 负缓存）
                         if (quotaEnforcementService.isDepartmentScopeEnabled() && departmentResolver != null) {
-                            final String dept = departmentResolver.resolve(holder);
-                            if (dept != null && !dept.isEmpty()) {
-                                exchange.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
-                                httpRequest.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
-                            }
+                            orgScopeResolution = Mono.fromRunnable(() -> {
+                                final String dept = departmentResolver.resolve(holder);
+                                if (dept != null && !dept.isEmpty()) {
+                                    exchange.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
+                                    httpRequest.getAttributes().put(QUOTA_DEPARTMENT_ATTRIBUTE, dept);
+                                }
+                            }).subscribeOn(Schedulers.boundedElastic()).then();
                         }
                     }
                 }
@@ -402,7 +409,10 @@ public class ServiceRequestHandler {
                     prepareResponseCacheKey(exchange, httpRequest, callerId, endpoint);
                 }
 
-                return handleWithInstanceAdapter(
+                // 【评审修复（中危）配套】归属解析（可能含一次 DB 读）完成后才进入适配链，
+                // 保证 tryReserve 读 QUOTA_DEPARTMENT_ATTRIBUTE 时解析已落属性。defer 使
+                // 适配链的构建也延后到解析线程上执行。
+                return orgScopeResolution.then(Mono.defer(() -> handleWithInstanceAdapter(
                     endpoint,
                     modelName,
                     authorization,
@@ -410,7 +420,7 @@ public class ServiceRequestHandler {
                     tracingContext,
                     executor,
                     exchange
-                );
+                )));
             });
     }
 

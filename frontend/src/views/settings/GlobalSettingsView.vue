@@ -60,8 +60,10 @@
           <MiscSettings />
         </el-tab-pane>
 
-        <!-- 底部出口：说明这些是默认值，单个模型要去接入管理调 -->
+        <!-- 底部出口：说明这些是默认值，单个模型要去接入管理调。
+             「其他」tab（高级计价 / PII 脱敏）不是按模型的配置，不适用本提示，2026-11-28 起隐藏。 -->
         <el-alert
+          v-if="active !== 'misc'"
           type="info"
           :closable="false"
           show-icon

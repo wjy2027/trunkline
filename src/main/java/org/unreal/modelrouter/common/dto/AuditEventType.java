@@ -54,8 +54,8 @@ public enum AuditEventType {
     KMS_KEY_ROTATED,        // KMS 主密钥热轮换
     KMS_KEY_ROLLBACK,       // KMS 写版本应急回退
     API_KEY_ROTATED,        // API Key 轮换（自动调度 / 强制）
-    PRICING_RULE_CHANGED,   // 高级计价规则变更（企业私有化内部成本测算）
-    QUOTA_AMOUNT_CHANGED,   // 组织维金额额度变更（企业私有化内部成本治理，非 persistable）
+    PRICING_RULE_CHANGED,   // 高级计价规则变更（企业私有化内部成本治理，落 security_audit）
+    QUOTA_AMOUNT_CHANGED,   // 组织维金额额度变更（企业私有化内部成本治理，落 security_audit）
     APPROVAL_SUBMITTED,     // API Key 审批申请提交
     APPROVAL_DECIDED,       // API Key 审批决定（通过 / 拒绝）
 
@@ -66,11 +66,12 @@ public enum AuditEventType {
     /**
      * 可落 security_audit.event_type 列的事件类型全集。
      *
-     * <p>必须与两库 db/migration 目录下 V1__baseline.sql 中 security_audit.event_type 的
-     * enum/CHECK 定义保持一致（当前 17 项）。其余枚举值——身份生命周期、SCIM、KMS、
-     * 审批以及 DATA_ERASURE——走 B1 哈希审计链（eventType 为字符串，落 canonicalJson），
-     * 不写入该列。若把它们塞进该表的 IN 查询参数，H2 enum 列会报
-     * SQL 22030 Value not permitted for column（表现为审计查询端点 500）。</p>
+     * <p>必须与两库 db/migration 目录下 V3__audit_event_type_whitelist.sql
+     * （h2 的 enum 值集 / postgres 的 check 约束）保持一致（当前 19 项）。
+     * 其余枚举值——身份生命周期、SCIM、KMS、审批以及 DATA_ERASURE——走 B1 哈希审计链
+     * （eventType 为字符串，落 canonicalJson），不写入该列。若把它们塞进该表的 IN
+     * 查询参数，H2 enum 列会报 SQL 22030 Value not permitted for column（表现为审计
+     * 查询端点 500）。</p>
      */
     private static final List<AuditEventType> PERSISTABLE_TYPES = List.of(
             JWT_TOKEN_ISSUED, JWT_TOKEN_REFRESHED, JWT_TOKEN_REVOKED,
@@ -78,7 +79,8 @@ public enum AuditEventType {
             API_KEY_CREATED, API_KEY_USED, API_KEY_REVOKED, API_KEY_EXPIRED, API_KEY_UPDATED,
             SECURITY_ALERT, SUSPICIOUS_ACTIVITY, AUTHENTICATION_FAILED,
             AUTHORIZATION_FAILED, DATA_SANITIZATION,
-            SYSTEM_CLEANUP, SYSTEM_MAINTENANCE);
+            SYSTEM_CLEANUP, SYSTEM_MAINTENANCE,
+            PRICING_RULE_CHANGED, QUOTA_AMOUNT_CHANGED);
 
     /** 该类型是否可落 security_audit.event_type 列。 */
     public static boolean isPersistable(AuditEventType type) {
@@ -87,7 +89,7 @@ public enum AuditEventType {
 
     /**
      * 归一化审计查询的 eventTypes 参数：
-     * null/空 → 全部可落库类型（等价“不过滤”，因为本表只可能存这 17 类）；
+     * null/空 → 全部可落库类型（等价“不过滤”，因为本表只可能存这 19 类）；
      * 非空 → 剔除不可落库类型；返回空列表表示请求的类型均不在本表，调用方应直接返回空结果。
      */
     public static List<AuditEventType> normalizeForQuery(List<AuditEventType> requested) {
